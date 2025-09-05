@@ -21,7 +21,7 @@ const page = () => {
       <FeaturedServices/>
       <Milestones/>
       <CardCaroursalDemo/>
-      <AppleCardsCarouselDemo/>
+      {/* <AppleCardsCarouselDemo/> */}
       <Testimonials/>
 {/* <TeamSection/> */}
 <StepsSection/>

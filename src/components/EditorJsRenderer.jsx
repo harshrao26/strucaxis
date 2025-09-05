@@ -36,7 +36,7 @@ export default function EditorJsRenderer({ content }) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 text-gray-800 [&_a]:text-blue-600 [&_a]:underline">
+    <div className="max-w-7xl mx-auto space-y-6 text-gray-800 [&_a]:text-blue-600 [&_a]:underline">
       {content.blocks.map((block) => {
         const { type, data, id } = block;
 

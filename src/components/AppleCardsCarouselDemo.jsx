@@ -1,86 +1,106 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Carousel, Card } from "@/components/ui/apple-cards-carousel";
 
 export function AppleCardsCarouselDemo() {
-  const cards = data.map((card, index) => (
-    <Card key={card.src} card={card} index={index} />
-  ));
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setErr("");
+
+        // pulls only non-featured (as per your route) & caps count a bit
+        const res = await fetch(`/api/projects?limit=30`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed to fetch projects: ${res.status}`);
+        const json = await res.json();
+
+        const list = Array.isArray(json?.items) ? json.items : [];
+
+        // choose the best available cover for each project
+        const pickCover = (p) =>
+          p?.coverImage ||
+          (Array.isArray(p?.gallery) && p.gallery[0]?.src) ||
+          (Array.isArray(p?.galleryImages) && p.galleryImages[0]) ||
+          ""; // empty => filtered out
+
+        const normalized = list
+          .map((p, i) => {
+            const src = pickCover(p);
+            return src
+              ? {
+                  // Card expects a "card" object; we only pass src as requested
+                  src,
+                  // keep keys stable
+                  _key: p.slug || p._id || p.id || `proj-${i}`,
+                }
+              : null;
+          })
+          .filter(Boolean);
+
+        if (active) setItems(normalized);
+      } catch (e) {
+        if (active) setErr(e.message || "Unable to load projects.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const cards = useMemo(
+    () =>
+      items.map((card, index) => (
+        <Card key={card._key} card={{ src: card.src }} index={index} />
+      )),
+    [items]
+  );
 
   return (
     <div className="w-full h-full py-20">
-      <h2
-        className="max-w-7xl pl-4 mx-auto text-xl md:text-5xl font-bold text-neutral-800 dark:text-neutral-200 font-sans">
+      <h2 className="max-w-7xl pl-4 mx-auto text-xl md:text-5xl font-bold text-neutral-800 dark:text-neutral-200 font-sans">
         Projects
       </h2>
-      <Carousel items={cards} />
+
+      {/* loading / error states kept lightweight and inline */}
+      {loading && (
+        <div className="max-w-7xl mx-auto mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-[16/10] rounded-3xl bg-neutral-200 dark:bg-neutral-800 animate-pulse"
+            />
+          ))}
+        </div>
+      )}
+
+      {!loading && err && (
+        <div className="max-w-7xl mx-auto mt-6 px-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 text-red-700 p-4">
+            {err}
+          </div>
+        </div>
+      )}
+
+      {!loading && !err && items.length > 0 && <Carousel items={cards} />}
+
+      {!loading && !err && items.length === 0 && (
+        <div className="max-w-7xl mx-auto mt-6 px-4">
+          <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-300 p-6">
+            No project images available.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-const DummyContent = () => {
-  return (
-    <>
-      {[...new Array(3).fill(1)].map((_, index) => {
-        return (
-          <div
-            key={"dummy-content" + index}
-            className="bg-[#F5F5F7] dark:bg-neutral-800 p-8 md:p-14 rounded-3xl mb-4">
-            <p
-              className="text-neutral-600 dark:text-neutral-400 text-base md:text-2xl font-sans max-w-3xl mx-auto">
-              <span className="font-bold text-neutral-700 dark:text-neutral-200">
-                The first rule of Apple club is that you boast about Apple club.
-              </span>{" "}
-              Keep a journal, quickly jot down a grocery list, and take amazing
-              class notes. Want to convert those notes to text? No problem.
-              Langotiya jeetu ka mara hua yaar is ready to capture every
-              thought.
-            </p>
-           
-          </div>
-        );
-      })}
-    </>
-  );
-};
-
-const data = [
-  {
-    category: "Artificial Intelligence",
-    title: "You can do more with AI.",
-    src: "https://images.unsplash.com/photo-1593508512255-86ab42a8e620?q=80&w=3556&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-  {
-    category: "Productivity",
-    title: "Enhance your productivity.",
-    src: "https://images.unsplash.com/photo-1531554694128-c4c6665f59c2?q=80&w=3387&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-  {
-    category: "Product",
-    title: "Launching the new Apple Vision Pro.",
-    src: "https://images.unsplash.com/photo-1713869791518-a770879e60dc?q=80&w=2333&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-
-  {
-    category: "Product",
-    title: "Maps for your iPhone 15 Pro Max.",
-    src: "https://images.unsplash.com/photo-1599202860130-f600f4948364?q=80&w=2515&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-  {
-    category: "iOS",
-    title: "Photography just got better.",
-    src: "https://images.unsplash.com/photo-1602081957921-9137a5d6eaee?q=80&w=2793&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-  {
-    category: "Hiring",
-    title: "Hiring for a Staff Software Engineer",
-    src: "https://images.unsplash.com/photo-1511984804822-e16ba72f5848?q=80&w=2048&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    content: <DummyContent />,
-  },
-];

@@ -7,14 +7,7 @@ export default function Footer() {
   return (
     <footer className="relative bg-black text-white">
       {/* Big brand word behind */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 select-none overflow-hidden"
-      >
-        <p className="mx-auto w-[120%] max-w-none translate-y-6 truncate text-center font-extrabold leading-none text-white/10 [font-kerning:none] text-[22vw] md:text-[18vw]">
-          StrucAxis
-        </p>
-      </div>
+      
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8 pt-16 pb-28">
         <div className="grid gap-10 md:grid-cols-4">
@@ -56,8 +49,7 @@ export default function Footer() {
           </div>
 
           {/* Link columns with vertical separators */}
-          <div className="hidden md:block h-full border-l border-white/20" />
-          <FooterCol
+           <FooterCol
             titleList={[
               ["Home", "#"],
               ["About Us", "#about"],
@@ -73,7 +65,7 @@ export default function Footer() {
               ["Career", "#career"],
             ]}
           />
-          <FooterCol
+          {/* <FooterCol
             titleList={[
               ["Sheffield", "#"],
               ["Manchester", "#"],
@@ -81,9 +73,12 @@ export default function Footer() {
               ["New York", "#"],
               ["Contact", "#contact"],
             ]}
-          />
+          /> */}
         </div>
       </div>
+      <p className="text-[18vw] -mt-40 -mb-20 text-center text-white/10">
+        StrucAxis
+      </p>
 
       {/* Bottom bar */}
       <div className="relative border-t border-white/10">
@@ -92,6 +87,8 @@ export default function Footer() {
           <p>Designed with passion &amp; precision.</p>
         </div>
       </div>
+<p className="text-black">df</p>
+      
     </footer>
   );
 }

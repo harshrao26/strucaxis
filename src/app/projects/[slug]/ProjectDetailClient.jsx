@@ -6,7 +6,7 @@ export default function ProjectDetailClient({ project }) {
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const accent = project.accentColor?.split(" ")[0] || "#111";
-  const images = project.galleryImages || [];
+  const images = Array.isArray(project.galleryImages) ? project.galleryImages : [];
 
   const openLightbox = (i) => setLightboxIndex(i);
   const closeLightbox = () => setLightboxIndex(null);
@@ -19,21 +19,30 @@ export default function ProjectDetailClient({ project }) {
     <div className="min-h-screen bg-neutral-50">
       {/* Hero Section */}
       <div className="relative w-full h-[60vh] lg:h-[75vh] overflow-hidden">
-        <img
-          src={project.coverImage}
-          alt={project.title}
-          fill
-          priority
-          className="object-cover"
-        />
+        {project.coverImage ? (
+          <img
+            src={project.coverImage}
+            alt={project.title}
+            fill
+            priority
+            className="object-cover"
+            sizes="100vw"
+          />
+        ) : (
+          <div className="w-full h-full bg-neutral-200" />
+        )}
         <div className="absolute inset-0 bg-black/50" />
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 text-center text-white max-w-3xl px-4">
           <h1 className="text-xl lg:text-6xl font-semibold mb-4">
             {project.title}
           </h1>
-          <p className="text-lg opacity-90">
-            {project.client} • {project.year}
-          </p>
+          {(project.client || project.year) && (
+            <p className="text-lg opacity-90">
+              {project.client}
+              {project.client && project.year ? " • " : ""}
+              {project.year}
+            </p>
+          )}
         </div>
       </div>
 
@@ -41,9 +50,11 @@ export default function ProjectDetailClient({ project }) {
       <div className="max-w-6xl mx-auto px-6 lg:px-12 py-16 grid lg:grid-cols-3 gap-12">
         {/* Main description & Gallery */}
         <div className="lg:col-span-2">
-          <p className="text-lg leading-relaxed text-neutral-700 whitespace-pre-line mb-12">
-            {project.description}
-          </p>
+          {project.description && (
+            <p className="text-lg leading-relaxed text-neutral-700 whitespace-pre-line mb-12">
+              {project.description}
+            </p>
+          )}
 
           {/* Gallery */}
           {images.length > 0 && (
@@ -54,12 +65,14 @@ export default function ProjectDetailClient({ project }) {
                   className="overflow-hidden rounded-xl shadow-md cursor-pointer group"
                   onClick={() => openLightbox(i)}
                 >
+                  {/* regular img works better inside CSS columns */}
                   <img
                     src={img}
                     alt={`${project.title} image ${i + 1}`}
                     width={1000}
                     height={800}
-                    className="hover:scale-105 transition-transform duration-500 object-cover"
+                    className="hover:scale-105 transition-transform duration-500 object-cover w-full h-auto"
+                    loading="lazy"
                   />
                 </div>
               ))}
@@ -114,33 +127,37 @@ export default function ProjectDetailClient({ project }) {
           )}
 
           {/* External Links */}
-          <div className="space-y-3">
-            {project.liveUrl && (
-              <a
-                href={project.liveUrl}
-                target="_blank"
-                className="block w-full text-center py-3 rounded-lg font-medium shadow-md hover:shadow-lg transition"
-                style={{ backgroundColor: accent, color: "#fff" }}
-              >
-                Visit Website
-              </a>
-            )}
-            {project.caseStudyUrl && (
-              <a
-                href={project.caseStudyUrl}
-                target="_blank"
-                className="block w-full text-center py-3 rounded-lg font-medium border border-neutral-300 hover:border-neutral-500 transition"
-              >
-                View Case Study
-              </a>
-            )}
-          </div>
+          {(project.liveUrl || project.caseStudyUrl) && (
+            <div className="space-y-3">
+              {project.liveUrl && (
+                <a
+                  href={project.liveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full text-center py-3 rounded-lg font-medium shadow-md hover:shadow-lg transition"
+                  style={{ backgroundColor: accent, color: "#fff" }}
+                >
+                  Visit Website
+                </a>
+              )}
+              {project.caseStudyUrl && (
+                <a
+                  href={project.caseStudyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full text-center py-3 rounded-lg font-medium border border-neutral-300 hover:border-neutral-500 transition"
+                >
+                  View Case Study
+                </a>
+              )}
+            </div>
+          )}
         </aside>
       </div>
 
       {/* Lightbox Modal */}
       {lightboxIndex !== null && (
-        <div className="fixed z-[100000000] inset-0 bg-black/90 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100000000]">
           <button
             className="absolute top-6 right-6 text-white text-3xl"
             onClick={closeLightbox}
@@ -150,12 +167,14 @@ export default function ProjectDetailClient({ project }) {
           <button
             className="absolute left-6 text-white text-4xl"
             onClick={prevImage}
+            aria-label="Previous image"
           >
             ‹
           </button>
           <button
             className="absolute right-6 text-white text-4xl"
             onClick={nextImage}
+            aria-label="Next image"
           >
             ›
           </button>
@@ -165,7 +184,7 @@ export default function ProjectDetailClient({ project }) {
               alt={`Project image ${lightboxIndex + 1}`}
               width={1600}
               height={1200}
-              className="object-contain rounded-lg shadow-2xl"
+              className="object-contain rounded-lg shadow-2xl max-h-[85vh] w-auto"
             />
           </div>
         </div>

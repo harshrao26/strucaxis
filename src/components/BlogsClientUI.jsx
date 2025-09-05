@@ -77,7 +77,7 @@ export default function BlogsClientUI({ blog }) {
           alt={blog?.title || "Blog cover"}
           className="w-full h-full object-cover brightness-50 absolute"
         />
-        <div className="absolute md:px-0 px-4 inset-0 flex flex-col justify-end px-0 md:px-10 pb-10 text-white max-w-7xl mx-auto">
+        <div className="absolute md:px-0 px-4 inset-0 flex flex-col justify-end px-4 md:px-0 pb-10 text-white max-w-7xl mx-auto">
           <span className="bg-white/20 backdrop-blur px-4 py-2 rounded-full text-xs font-medium w-fit mb-3">
             {blog.category}
           </span>
