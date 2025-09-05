@@ -1,58 +1,77 @@
+// /app/api/feature-projects/[id]/route.js
 import { NextResponse } from "next/server";
+import FeatureProject from "@/models/FeatureProject";
 import mongoose from "mongoose";
-import Project from "@/models/Project";
+import { connectDB } from "@/lib/mongodb";
 
-async function connectDB() {
-  if (mongoose.connection.readyState >= 1) return;
-  await mongoose.connect(process.env.MONGODB_URI, { bufferCommands: false });
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function asQuery(ref) {
+  // If it looks like a 24-hex ObjectId, query by _id; otherwise by slug
+  const isId = /^[0-9a-fA-F]{24}$/.test(ref);
+  return isId ? { _id: new mongoose.Types.ObjectId(ref) } : { slug: ref };
 }
 
-// Optional: lightweight admin guard (set ADMIN_SECRET in .env.local)
-// Send header: x-admin-secret: <your secret> from your admin UI fetches
-function assertAdmin(request) {
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret) return true;
-  const token = request.headers.get("x-admin-secret");
-  if (token !== secret) throw new Error("UNAUTHORIZED");
-  return true;
-}
-
-// GET /api/projects/[id]
+// GET /api/feature-projects/:id-or-slug   (only featured:false)
 export async function GET(_req, { params }) {
   try {
     await connectDB();
-    const doc = await Project.findById(params.id);
+    const ref = params.id;
+
+    const doc = await FeatureProject.findOne({ ...asQuery(ref), featured: false }).lean();
     if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(doc);
-  } catch (e) {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  } catch (err) {
+    console.error("GET /feature-projects/:id error:", err);
+    return NextResponse.json({ error: "Failed to fetch project" }, { status: 500 });
   }
 }
 
-// PUT /api/projects/[id]
-export async function PUT(request, { params }) {
+// PATCH /api/feature-projects/:id-or-slug   (only featured:false)
+export async function PATCH(req, { params }) {
   try {
-    assertAdmin(request);
     await connectDB();
-    const body = await request.json();
-    const updated = await Project.findByIdAndUpdate(params.id, body, { new: true });
+    const ref = params.id;
+    const body = await req.json();
+
+    // Normalize legacy galleryImages -> gallery if needed
+    if ((!body.gallery || body.gallery.length === 0) && Array.isArray(body.galleryImages)) {
+      body.gallery = body.galleryImages.map((src) => ({ src, alt: "" }));
+    }
+
+    const updated = await FeatureProject.findOneAndUpdate(
+      { ...asQuery(ref), featured: false },
+      { $set: body },
+      { new: true, runValidators: true }
+    ).lean();
+
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(updated);
-  } catch (e) {
-    const status = e.message === "UNAUTHORIZED" ? 401 : 500;
-    return NextResponse.json({ error: "Failed to update" }, { status });
+  } catch (err) {
+    console.error("PATCH /feature-projects/:id error:", err);
+    if (err?.code === 11000) {
+      return NextResponse.json(
+        { error: "Duplicate key", fields: err.keyValue },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
   }
 }
 
-// DELETE /api/projects/[id]
-export async function DELETE(request, { params }) {
+// DELETE /api/feature-projects/:id-or-slug   (only featured:false)
+export async function DELETE(_req, { params }) {
   try {
-    assertAdmin(request);
     await connectDB();
-    await Project.findByIdAndDelete(params.id);
+    const ref = params.id;
+
+    const res = await FeatureProject.findOneAndDelete({ ...asQuery(ref), featured: false }).lean();
+    if (!res) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    const status = e.message === "UNAUTHORIZED" ? 401 : 500;
-    return NextResponse.json({ error: "Failed to delete" }, { status });
+  } catch (err) {
+    console.error("DELETE /feature-projects/:id error:", err);
+    return NextResponse.json({ error: "Failed to delete project" }, { status: 500 });
   }
 }

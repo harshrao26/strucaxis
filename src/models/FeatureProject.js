@@ -20,25 +20,18 @@ const FeatureProjectSchema = new Schema(
     // Media
     coverImage:   { type: String, default: "" },             // hero/thumbnail
     coverAlt:     { type: String, default: "" },             // NEW
-    mediaType:    { type: String, enum: ["image", "video"], default: "image" },
-    mediaUrl:     { type: String, default: "" },             // mp4/webm for hover-preview, optional
+     mediaUrl:     { type: String, default: "" },             // mp4/webm for hover-preview, optional
 
     // Prefer structured gallery; keep legacy as fallback if present elsewhere
     gallery:      { type: [GalleryItemSchema], default: [] }, // NEW preferred
     galleryImages:{ type: [String], default: [] },            // legacy (still here so old writes don’t break)
 
     // Copy & links
-    blurb:        { type: String, default: "", maxlength: 300 },
-    description:  { type: String, default: "" },
+     description:  { type: String, default: "" },
     caseStudyUrl: { type: String, default: "" },
-    liveUrl:      { type: String, default: "" },
-    dribbbleUrl:  { type: String, default: "" },
-    awwwardsUrl:  { type: String, default: "" },
-
+ 
     // Presentation
-    accentColor:  { type: String, default: "#7C5CFF" },
-    order:        { type: Number, default: 100 },
-    featured:     { type: Boolean, default: true },
+     featured:     { type: Boolean, default: false },
 
     // Stats
     stats: [{

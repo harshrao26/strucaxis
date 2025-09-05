@@ -1,116 +1,84 @@
+// /app/api/projects/route.js
 import { NextResponse } from "next/server";
-import { connectDB } from "@/lib/mongodb";
 import FeatureProject from "@/models/FeatureProject";
+import { connectDB } from "@/lib/mongodb";
 
-export async function GET(request) {
-  await connectDB();
-  const { searchParams } = new URL(request.url);
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  const page  = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
-  const limit = Math.min(parseInt(searchParams.get("limit") || "12", 10), 50);
-  const skip  = (page - 1) * limit;
+export async function GET(req) {
+  try {
+    await connectDB();
+    const { searchParams } = new URL(req.url);
 
-  const search   = searchParams.get("search");
-  const featured = searchParams.get("featured");
-  const sort     = searchParams.get("sort") || "order createdAt"; // order first, then createdAt desc-like
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const skip = (page - 1) * limit;
 
-  const filters = {};
-  if (featured === "true" || featured === "false") filters.featured = featured === "true";
+    const q = {};
 
-  if (search) {
-    const rx = new RegExp(search, "i");
-    filters.$or = [
-      { title: rx },
-      { client: rx },
-      { tags: rx },
-      { blurb: rx },
-      { description: rx },
-    ];
+    // 🔒 ALWAYS restrict to featured: false
+    q.featured = true;
+
+    const search = searchParams.get("search");
+    if (search) {
+      q.$or = [
+        { title:  { $regex: search, $options: "i" } },
+        { client: { $regex: search, $options: "i" } },
+        { tags:   { $regex: search, $options: "i" } },
+        { slug:   { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const tag = searchParams.get("tag");
+    if (tag) q.tags = tag;
+
+    const sort = searchParams.get("sort") || "-createdAt";
+
+    const [items, total] = await Promise.all([
+      FeatureProject.find(q).sort(sort).skip(skip).limit(limit).lean(),
+      FeatureProject.countDocuments(q),
+    ]);
+
+    return NextResponse.json({
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+      items,
+    });
+  } catch (err) {
+    console.error("GET /projects error:", err);
+    return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
   }
-
-  const [items, total] = await Promise.all([
-    FeatureProject.find(filters).sort(sort).skip(skip).limit(limit).lean(),
-    FeatureProject.countDocuments(filters),
-  ]);
-
-  return NextResponse.json({
-    page, limit, total, totalPages: Math.ceil(total / limit), items,
-  });
 }
 
-export async function POST(request) {
-  await connectDB();
-  const body = await request.json();
-
-  const required = ["title", "slug"];
-  const missing = required.filter((k) => !body?.[k] || String(body[k]).trim() === "");
-  if (missing.length) {
-    return NextResponse.json({ error: `Missing required field(s): ${missing.join(", ")}` }, { status: 400 });
-  }
-
+export async function POST(req) {
   try {
-    // Normalize tags
-    let tags = body.tags;
-    if (!Array.isArray(tags) && typeof tags === "string") {
-      tags = tags.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-    if (!Array.isArray(tags)) tags = [];
+    await connectDB();
+    const body = await req.json();
 
-    // Normalize gallery (support strings or objects)
-    let gallery = Array.isArray(body.gallery) ? body.gallery : [];
-    gallery = gallery
-      .map((g) => {
-        if (typeof g === "string") return { src: g, alt: "" };
-        if (g && typeof g === "object") return { src: g.src, alt: g.alt || "" };
-        return null;
-      })
-      .filter((x) => x && x.src);
-
-    // If gallery is empty but legacy galleryImages exist, use them
-    if ((!gallery || gallery.length === 0) && Array.isArray(body.galleryImages)) {
-      gallery = body.galleryImages.filter(Boolean).map((src) => ({ src, alt: "" }));
+    if (!body.title || !body.slug) {
+      return NextResponse.json(
+        { error: "title and slug are required" },
+        { status: 400 }
+      );
     }
 
-    const doc = await FeatureProject.create({
-      title:        String(body.title).trim(),
-      slug:         String(body.slug).trim().toLowerCase(),
-      client:       body.client || "",
-      year:         body.year || undefined,
-      tags,
+    if ((!body.gallery || body.gallery.length === 0) && Array.isArray(body.galleryImages)) {
+      body.gallery = body.galleryImages.map((src) => ({ src, alt: "" }));
+    }
 
-      // Media
-      coverImage:   body.coverImage || "",
-      coverAlt:     body.coverAlt || "",        // NEW
-      mediaType:    body.mediaType || "image",
-      mediaUrl:     body.mediaUrl || "",
-      gallery,                                   // NEW structured gallery
-      galleryImages: Array.isArray(body.galleryImages) ? body.galleryImages : [], // legacy echo
-
-      // Copy & links
-      blurb:        body.blurb || "",
-      description:  body.description || "",
-      caseStudyUrl: body.caseStudyUrl || "",
-      liveUrl:      body.liveUrl || "",
-      dribbbleUrl:  body.dribbbleUrl || "",
-      awwwardsUrl:  body.awwwardsUrl || "",
-
-      // Presentation
-      accentColor:  body.accentColor || "#7C5CFF",
-      order:        typeof body.order === "number" ? body.order : 100,
-      featured:     typeof body.featured === "boolean" ? body.featured : true,
-
-      // Stats
-      stats:        Array.isArray(body.stats) ? body.stats : [],
-
-      // SEO
-      schemaMarkup: body.schemaMarkup || "",     // NEW
-    });
-
-    return NextResponse.json(doc, { status: 201 });
+    const created = await FeatureProject.create(body);
+    return NextResponse.json(created, { status: 201 });
   } catch (err) {
-    console.error(err);
+    console.error("POST /projects error:", err);
     if (err?.code === 11000) {
-      return NextResponse.json({ error: "Slug already exists" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Duplicate key", fields: err.keyValue },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
   }

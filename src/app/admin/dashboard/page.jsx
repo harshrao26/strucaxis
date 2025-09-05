@@ -96,11 +96,11 @@ export default function AdminDashboard() {
                   icon={<MdOutlineCollectionsBookmark />}
                   label="Projects"
                 />
-                <SideItem
+                {/* <SideItem
                   href="/admin/dashboard/upload-project"
                   icon={<FiUpload />}
                   label="Upload Project"
-                />
+                /> */}
                 <SideItem
                   href="/admin/dashboard/featured-projects"
                   icon={<FiStar />}
@@ -159,17 +159,17 @@ export default function AdminDashboard() {
                 title="Manage Projects"
                 desc="Organize and showcase your work."
               />
-              <ActionCard
+              {/* <ActionCard
                 href="/admin/dashboard/upload-project"
                 icon={<FiUpload />}
                 title="Upload Project"
                 desc="Add a new project with images & meta."
                 primary
-              />
+              /> */}
               <ActionCard
                 href="/admin/dashboard/featured-projects"
                 icon={<FiStar />}
-                title="Featured Projects"
+                title=" Projects"
                 desc="Promote or curate homepage spotlight."
                 primary
               />

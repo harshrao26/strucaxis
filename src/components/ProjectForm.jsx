@@ -1,691 +1,237 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { FiUploadCloud, FiX, FiImage, FiCheck, FiTrash2, FiAlertCircle } from "react-icons/fi";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { FiAlertCircle } from "react-icons/fi";
+import CloudinaryUploader from "./CloudinaryUploader";
+import { Row, Field } from "./UI";
 
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME; // e.g. "your-cloud"
-const UPLOAD_PRESET = "trygve-studio"; // your preset name
+export default function ProjectForm({ mode = "create", initial = {}, onSubmit }) {
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+  const [schemaValid, setSchemaValid] = useState(true);
 
-export default function ProjectForm() {
-  const [form, setForm] = useState({
-    title: "",
-    type: "Interior",
-    location: "",
-    timeline: "",
-    tags: "",
-    description: "",
-    coverAlt: "",            // NEW
-    schemaMarkup: "",        // NEW (raw JSON-LD string)
+  const [f, setF] = useState({
+    title: initial.title || "",
+    slug: initial.slug || "",
+    client: initial.client || "",
+    year: initial.year || "",
+    tags: Array.isArray(initial.tags) ? initial.tags.join(", ") : "",
+    description: initial.description || "",
+    coverImage: initial.coverImage || "",
+    coverAlt: initial.coverAlt || "",
+    mediaUrl: initial.mediaUrl || "",
+    galleryImages: Array.isArray(initial.gallery)
+      ? initial.gallery.map(g => g.src)
+      : (initial.galleryImages || []),
+    galleryAlts: Array.isArray(initial.gallery)
+      ? initial.gallery.map(g => g.alt || "")
+      : [],
+    caseStudyUrl: initial.caseStudyUrl || "",
+    featured: typeof initial.featured === "boolean" ? initial.featured : true,
+    stats: (initial.stats || [])
+      .map(s => `${s.value || ""} - ${s.label || ""}`.trim())
+      .filter(Boolean)
+      .join("\n"),
+    schemaMarkup: initial.schemaMarkup || "",
   });
 
-  const tagsChips = useMemo(
-    () =>
-      form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-    [form.tags]
-  );
-
-  const [coverFile, setCoverFile] = useState(null);
-  const [coverPreview, setCoverPreview] = useState(null);
-  const [coverUrl, setCoverUrl] = useState("");
-  const [coverProgress, setCoverProgress] = useState(0);
-
-  const [galleryFiles, setGalleryFiles] = useState([]);
-  const [galleryPreviews, setGalleryPreviews] = useState([]);
-  const [galleryUrls, setGalleryUrls] = useState([]);
-  const [galleryProgress, setGalleryProgress] = useState({}); // index -> %
-  const [galleryAlts, setGalleryAlts] = useState([]);         // NEW: index -> alt text
-
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [ok, setOk] = useState(false);
-
-  const [schemaValid, setSchemaValid] = useState(true);       // NEW: quick check flag
-
-  const coverInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
-
-  /* ------------------------------ Form handlers ----------------------------- */
-
-  const onChange = (e) => {
-    const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
-
-    if (name === "schemaMarkup") {
-      // soft validation (don’t block submission; just show status)
-      try {
-        if (value.trim()) JSON.parse(value);
-        setSchemaValid(true);
-      } catch {
-        setSchemaValid(false);
-      }
-    }
+  const onChange = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const validate = () => {
+    if (!f.title.trim() || !f.slug.trim()) return "Title and Slug are required";
+    if (f.slug.includes(" ")) return "Slug cannot contain spaces";
+    return null;
   };
-
-  const onRemoveTag = (t) => {
-    const next = tagsChips.filter((x) => x !== t);
-    setForm((f) => ({ ...f, tags: next.join(", ") }));
-  };
-
-  /* ----------------------------- Upload helpers ----------------------------- */
-
-  const uploadToCloudinary = (file, onProgress) =>
-    new Promise((resolve, reject) => {
-      const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", UPLOAD_PRESET);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", url);
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable && typeof onProgress === "function") {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      });
-
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState === 4) {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const json = JSON.parse(xhr.responseText);
-              resolve(json.secure_url);
-            } catch {
-              reject(new Error("Cloudinary response parse error"));
-            }
-          } else {
-            reject(new Error("Cloudinary upload failed"));
-          }
-        }
-      };
-
-      xhr.send(fd);
-    });
-
-  const handleCoverSelect = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setCoverFile(f);
-    setCoverPreview(URL.createObjectURL(f));
-    setCoverUrl("");
-    setCoverProgress(0);
-    setOk(false);
-  };
-
-  const handleGallerySelect = (files) => {
-    const arr = Array.from(files || []);
-    setGalleryFiles(arr);
-    setGalleryPreviews(arr.map((f) => URL.createObjectURL(f)));
-    setGalleryUrls([]);
-    setGalleryProgress({});
-    setGalleryAlts((prev) => {
-      // initialize or keep previous length where possible
-      const next = [...prev];
-      next.length = arr.length;
-      return next.fill("", 0, arr.length);
-    });
-    setOk(false);
-  };
-
-  const handleGalleryInput = (e) => {
-    handleGallerySelect(e.target.files);
-  };
-
-  const uploadImages = async () => {
-    if (!coverFile) throw new Error("Please select a cover image");
-
-    setUploading(true);
-    setError("");
-    try {
-      // Cover
-      const coverSecure = await uploadToCloudinary(coverFile, setCoverProgress);
-      setCoverUrl(coverSecure);
-
-      // Gallery
-      const urls = [];
-      for (let i = 0; i < galleryFiles.length; i++) {
-        const f = galleryFiles[i];
-        const onProg = (p) =>
-          setGalleryProgress((prev) => ({ ...prev, [i]: p }));
-        const u = await uploadToCloudinary(f, onProg);
-        urls.push(u);
-      }
-      setGalleryUrls(urls);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeGalleryIndex = (idx) => {
-    const nextFiles = [...galleryFiles];
-    const nextPrevs = [...galleryPreviews];
-    nextFiles.splice(idx, 1);
-    nextPrevs.splice(idx, 1);
-    setGalleryFiles(nextFiles);
-    setGalleryPreviews(nextPrevs);
-
-    if (galleryUrls.length) {
-      const nextUrls = [...galleryUrls];
-      nextUrls.splice(idx, 1);
-      setGalleryUrls(nextUrls);
-    }
-
-    setGalleryAlts((prev) => {
-      const n = [...prev];
-      n.splice(idx, 1);
-      return n;
-    });
-
-    setGalleryProgress((prev) => {
-      const copy = {};
-      // rebuild progress keys to keep them compact after removal
-      Object.keys(prev)
-        .map((k) => parseInt(k, 10))
-        .filter((k) => k !== idx)
-        .sort((a, b) => a - b)
-        .forEach((oldK, i) => {
-          copy[i] = prev[oldK];
-        });
-      return copy;
-    });
-  };
-
-  /* -------------------------------- Submit --------------------------------- */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setOk(false);
+    setError(null); setOkMsg(null);
+
+    const v = validate();
+    if (v) { setError(v); return; }
+
+    // build gallery objects with alt
+    const gallery = (f.galleryImages || []).map((src, i) => ({
+      src,
+      alt: (f.galleryAlts?.[i] || "").trim(),
+    }));
+
+    // soft-validate schema JSON (store raw string regardless)
+    if (f.schemaMarkup?.trim()) {
+      try { JSON.parse(f.schemaMarkup); setSchemaValid(true); }
+      catch { setSchemaValid(false); /* allow submit anyway */ }
+    } else {
+      setSchemaValid(true);
+    }
+
+    setSubmitting(true);
     try {
-      // ensure uploads done
-      if (!coverUrl || (galleryFiles.length && galleryUrls.length !== galleryFiles.length)) {
-        await uploadImages();
-      }
-
-      // build gallery objects with alt text
-      const gallery =
-        (galleryUrls || []).map((src, i) => ({
-          src,
-          alt: (galleryAlts?.[i] || "").trim(),
-        })) || [];
-
-      // optional: soft JSON check; store raw either way
-      let schemaMarkup = form.schemaMarkup?.trim() || "";
-      if (schemaMarkup) {
-        try {
-          JSON.parse(schemaMarkup); // only to validate; we still send string
-        } catch {
-          // keep string; you might show a warning but allow submit
-        }
-      }
-
       const payload = {
-        title: form.title.trim(),
-        type: form.type,
-        location: form.location.trim(),
-        timeline: form.timeline.trim(),
-        tags: tagsChips,
-        cover: coverUrl,
-        coverAlt: form.coverAlt.trim(),       // NEW
-        gallery,                               // NEW: [{src, alt}]
-        description: form.description.trim(),
-        schemaMarkup,                           // NEW: stored as string
+        title: f.title.trim(),
+        slug: f.slug.trim().toLowerCase(),
+        client: f.client.trim(),
+        year: f.year ? Number(f.year) : undefined,
+        tags: f.tags.split(",").map((s) => s.trim()).filter(Boolean),
+
+        // Media
+        coverImage: f.coverImage.trim(),
+        coverAlt: f.coverAlt.trim(),
+        mediaUrl: f.mediaUrl.trim(),
+
+        // structured + legacy
+        gallery,
+        galleryImages: Array.isArray(f.galleryImages) ? f.galleryImages : [],
+
+        // Links
+        caseStudyUrl: f.caseStudyUrl.trim(),
+
+        // Presentation
+        featured: !!f.featured,
+
+        // Stats
+        stats: f.stats
+          ? f.stats.split("\n").map((line) => {
+              const [value, ...rest] = line.split(" - ");
+              return { value: (value || "").trim(), label: (rest.join(" - ") || "").trim() };
+            }).filter((s) => s.value || s.label)
+          : [],
+
+        // SEO
+        schemaMarkup: f.schemaMarkup,
       };
 
-      setSaving(true);
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to save project");
-
-      // success
-      setOk(true);
-
-      // reset
-      setForm({
-        title: "",
-        type: "Interior",
-        location: "",
-        timeline: "",
-        tags: "",
-        description: "",
-        coverAlt: "",
-        schemaMarkup: "",
-      });
-      setCoverFile(null);
-      setCoverPreview(null);
-      setCoverUrl("");
-      setCoverProgress(0);
-      setGalleryFiles([]);
-      setGalleryPreviews([]);
-      setGalleryUrls([]);
-      setGalleryProgress({});
-      setGalleryAlts([]);
-    } catch (err) {
-      setError(err.message || "Something went wrong");
+      await onSubmit(payload);
+      setOkMsg(mode === "create" ? "Project created!" : "Project updated!");
+      setTimeout(() => router.push("/admin/feature-projects"), 650);
+    } catch (e) {
+      setError(e.message || "Error");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  /* --------------------------------- UI ------------------------------------ */
-
   return (
-    <form onSubmit={handleSubmit} className="p-6 md:p-8">
-      {/* Status banners */}
-      {error && (
-        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
-      {ok && (
-        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm flex items-center gap-2">
-          <FiCheck className="shrink-0" /> Project saved successfully.
-        </div>
-      )}
+    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {okMsg && <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{okMsg}</p>}
 
-      {/* Form grid */}
-      <div className="grid md:grid-cols-5 gap-6">
-        {/* Left column */}
-        <div className="md:col-span-3">
-          {/* Basics */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5">
-            <h2 className="text-base font-medium">Basics</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Title">
-                <input
-                  name="title"
-                  value={form.title}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
+      <Row>
+        <Field label="Title *"><input className="input border-2 rounded w-full p-2" value={f.title} onChange={(e)=>onChange("title", e.target.value)} /></Field>
+        <Field label="Slug *"><input className="input border-2 rounded w-full p-2" value={f.slug} onChange={(e)=>onChange("slug", e.target.value)} placeholder="kilo-app-redesign" /></Field>
+        <Field label="Client"><input className="input border-2 rounded w-full p-2" value={f.client} onChange={(e)=>onChange("client", e.target.value)} /></Field>
+      </Row>
 
-              <Field label="Type">
-                <select
-                  name="type"
-                  value={form.type}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                >
-                  <option>Interior</option>
-                  <option>Architecture</option>
-                </select>
-              </Field>
+      <Row>
+        <Field label="Year"><input className="input border-2 rounded w-full p-2" value={f.year} onChange={(e)=>onChange("year", e.target.value)} placeholder="2025" /></Field>
+        <Field label="Tags (comma separated)"><input className="input border-2 rounded w-full p-2" value={f.tags} onChange={(e)=>onChange("tags", e.target.value)} placeholder="Brand, Web, SaaS" /></Field>
+        <Field label="Featured">
+          <select className="input border-2 rounded w-full p-2" value={String(f.featured)} onChange={(e)=>onChange("featured", e.target.value === "true")}>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </Field>
+      </Row>
 
-              <Field label="Location">
-                <input
-                  name="location"
-                  value={form.location}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
+      <Field label="Description (long)">
+        <textarea className="input min-h-[160px] border-2 rounded w-full p-2" value={f.description} onChange={(e)=>onChange("description", e.target.value)} />
+      </Field>
 
-              <Field label="Timeline">
-                <input
-                  name="timeline"
-                  value={form.timeline}
-                  onChange={onChange}
-                  placeholder="Jan 2024 – Jun 2024"
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
-            </div>
+      <Row>
+        <Field label="Cover Image">
+          <CloudinaryUploader
+            label="Upload cover image"
+            multiple={false}
+            value={f.coverImage}
+            onChange={(url) => onChange("coverImage", url)}
+          />
+        </Field>
+        <Field label="Cover Alt Text (SEO)">
+          <input className="input border-2 rounded w-full p-2" value={f.coverAlt} onChange={(e)=>onChange("coverAlt", e.target.value)} placeholder="e.g., Contemporary café interior with warm lighting" />
+        </Field>
+        <Field label="Hover Preview Video (mp4/webm, optional)">
+          <input className="input border-2 rounded w-full p-2" value={f.mediaUrl} onChange={(e)=>onChange("mediaUrl", e.target.value)} />
+        </Field>
+      </Row>
 
-            <Field label="Tags" hint="Comma or Enter to add">
-              <TagInput
-                value={form.tags}
-                onChange={(v) => setForm((f) => ({ ...f, tags: v }))}
-                onRemove={onRemoveTag}
-                chips={tagsChips}
-                className="border-zinc-300 border-[1px] rounded"
-              />
-            </Field>
+      <Field label="Gallery Images">
+        <CloudinaryUploader
+          label="Upload gallery images"
+          multiple
+          value={f.galleryImages}
+          onChange={(arr) => {
+            const nextAlts = [...(f.galleryAlts || [])];
+            if (arr.length > nextAlts.length) nextAlts.push(...Array(arr.length - nextAlts.length).fill(""));
+            else if (arr.length < nextAlts.length) nextAlts.length = arr.length;
+            onChange("galleryImages", arr);
+            onChange("galleryAlts", nextAlts);
+          }}
+        />
+      </Field>
 
-            <Field label="Description ">
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={onChange}
-                className="input p-4 border-zinc-300 border-[1px] rounded min-h-[120px] w-full "
-                required
-              />
-            </Field>
-          </div>
-
-          {/* Gallery */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5 mt-6">
-            <h2 className="text-base font-medium">Gallery</h2>
-            <div
-              onClick={() => galleryInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const files = Array.from(e.dataTransfer.files || []).filter((f) =>
-                  f.type.startsWith("image/")
-                );
-                if (files.length) handleGallerySelect(files);
-              }}
-              className="mt-4 rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-4 py-8 text-center cursor-pointer hover:bg-[#EFEAE2] transition"
-            >
-              <div className="flex items-center justify-center gap-2 text-neutral-700">
-                <FiImage />
-                <span className="text-sm">Drag & drop images here, or click to browse</span>
-              </div>
-              <input
-                ref={galleryInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleGalleryInput}
-              />
-            </div>
-
-            {(galleryPreviews.length > 0 || galleryUrls.length > 0) && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-3">
-                {(galleryUrls.length ? galleryUrls : galleryPreviews).map((src, i) => {
-                  const done = Boolean(galleryUrls[i]);
-                  const prog = galleryProgress[i] ?? (done ? 100 : 0);
-                  return (
-                    <div key={i} className="group relative rounded-xl overflow-hidden border border-black/10 bg-white">
-                      <img src={src} alt={`Gallery ${i + 1}`} className="h-40 w-full object-cover" />
-
-                      {/* Remove button */}
-                      <button
-                        type="button"
-                        onClick={() => removeGalleryIndex(i)}
-                        className="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 border border-black/10 opacity-0 group-hover:opacity-100 transition"
-                        aria-label="Remove image"
-                      >
-                        <FiTrash2 className="text-neutral-700" />
-                      </button>
-
-                      {/* Progress */}
-                      {!done && (uploading || prog > 0) && (
-                        <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/10">
-                          <div className="h-full bg-black/80 transition-[width] duration-150" style={{ width: `${prog}%` }} />
-                        </div>
-                      )}
-
-                      {/* Done badge */}
-                      {done && (
-                        <span className="absolute top-2 left-2 rounded-full bg-black text-white text-[10px] px-2 py-1 flex items-center gap-1">
-                          <FiCheck /> Uploaded
-                        </span>
-                      )}
-
-                      {/* Alt input */}
-                      <div className="p-3 border-t border-black/10 bg-white">
-                        <label className="block text-xs text-neutral-700 mb-1">Alt text</label>
-                        <input
-                          value={galleryAlts[i] || ""}
-                          onChange={(e) => {
-                            const next = [...galleryAlts];
-                            next[i] = e.target.value;
-                            setGalleryAlts(next);
-                          }}
-                          placeholder="Describe the image (for SEO & accessibility)"
-                          className="w-full rounded-md border border-black/15 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-black/20"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="md:col-span-2">
-          {/* Cover */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5">
-            <h2 className="text-base font-medium">Cover</h2>
-            <div
-              onClick={() => coverInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const f = e.dataTransfer.files?.[0];
-                if (f && f.type.startsWith("image/")) {
-                  setCoverFile(f);
-                  setCoverPreview(URL.createObjectURL(f));
-                  setCoverUrl("");
-                  setCoverProgress(0);
-                }
-              }}
-              className="mt-4 rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-4 py-10 text-center cursor-pointer hover:bg-[#EFEAE2] transition"
-            >
-              <div className="flex items-center justify-center gap-2 text-neutral-700">
-                <FiUploadCloud />
-                <span className="text-sm">
-                  Drag & drop cover image here, or click to browse
-                </span>
-              </div>
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleCoverSelect}
-              />
-            </div>
-
-            {(coverPreview || coverUrl) && (
-              <div className="mt-4 relative rounded-xl overflow-hidden border border-black/10 bg-white">
-                <img
-                  src={coverUrl || coverPreview}
-                  alt="Cover preview"
-                  className="h-40 w-full object-cover"
-                />
-                {/* progress bar */}
-                {!coverUrl && (uploading || coverProgress > 0) && (
-                  <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/10">
-                    <div
-                      className="h-full bg-black/80 transition-[width] duration-150"
-                      style={{ width: `${coverProgress}%` }}
-                    />
-                  </div>
-                )}
-                {coverUrl && (
-                  <span className="absolute top-2 left-2 rounded-full bg-black text-white text-[10px] px-2 py-1 flex items-center gap-1">
-                    <FiCheck /> Uploaded
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Cover Alt */}
-            <div className="mt-4">
-              <Field label="Cover Alt Text" hint="For SEO & accessibility">
-                <input
-                  name="coverAlt"
-                  value={form.coverAlt}
-                  onChange={onChange}
-                  placeholder="e.g., Contemporary cafe interior with warm lighting and green wall"
-                  className="w-full rounded-md border border-black/15 px-3 py-2 outline-none focus:ring-2 focus:ring-black/20"
-                />
-              </Field>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={uploadImages}
-                disabled={!coverFile || uploading}
-                className="inline-flex items-center gap-2 rounded-full border border-black px-4 py-2 text-sm hover:bg-black hover:text-white transition disabled:opacity-50"
-              >
-                {uploading ? (
-                  <>
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-black/40 border-t-black animate-spin" />
-                    Uploading…
-                  </>
-                ) : (
-                  <>
-                    <FiUploadCloud />
-                    Upload Images
-                  </>
-                )}
-              </button>
-
-              {(coverFile || galleryFiles.length > 0) && !uploading && (
-                <span className="text-xs text-neutral-600">
-                  Ready to upload {coverFile ? "cover" : ""}{galleryFiles.length ? ` + ${galleryFiles.length} gallery` : ""}.
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Schema Markup */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5 mt-6">
-            <h2 className="text-base font-medium">Schema Markup (JSON-LD)</h2>
-            <p className="mt-1 text-xs text-neutral-600">
-              Paste valid JSON (e.g., <code>{"{\"@context\":\"https://schema.org\",\"@type\":\"Project\"}"}</code>). It will be stored as-is.
-            </p>
-            <div className="mt-3">
-              <textarea
-                name="schemaMarkup"
-                value={form.schemaMarkup}
-                onChange={onChange}
-                placeholder='{"@context":"https://schema.org","@type":"Project","name":"Crackpot Café & Bistro"}'
-                className="w-full min-h-[140px] rounded-lg border border-black/15 px-3 py-2 outline-none font-mono text-sm leading-6 focus:ring-2 focus:ring-black/20"
-              />
-              {!schemaValid && form.schemaMarkup.trim() && (
-                <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-700">
-                  <FiAlertCircle /> This doesn’t look like valid JSON. You can still save it, but fix if possible.
+      {Array.isArray(f.galleryImages) && f.galleryImages.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {f.galleryImages.map((src, i) => (
+            <div key={src + i} className="rounded-lg border p-3 bg-white">
+              <div className="flex items-start gap-3">
+                <img src={src} alt="" className="h-20 w-28 object-cover rounded border" />
+                <div className="flex-1">
+                  <div className="text-xs mb-1 text-neutral-600">Alt text for image #{i + 1}</div>
+                  <input
+                    className="input border rounded w-full p-2"
+                    value={f.galleryAlts?.[i] || ""}
+                    onChange={(e) => {
+                      const next = [...(f.galleryAlts || [])];
+                      next[i] = e.target.value;
+                      onChange("galleryAlts", next);
+                    }}
+                    placeholder="Describe image content (for SEO & accessibility)"
+                  />
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-
-          {/* Actions */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5 mt-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                disabled={saving || uploading || !coverFile}
-                className="inline-flex items-center gap-2 rounded-full border border-black px-5 py-2.5 text-sm hover:bg-black hover:text-white transition disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-black/40 border-t-black animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  <>
-                    <FiCheck /> Save Project
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setForm({
-                    title: "",
-                    type: "Interior",
-                    location: "",
-                    timeline: "",
-                    tags: "",
-                    description: "",
-                    coverAlt: "",
-                    schemaMarkup: "",
-                  });
-                  setCoverFile(null);
-                  setCoverPreview(null);
-                  setCoverUrl("");
-                  setCoverProgress(0);
-                  setGalleryFiles([]);
-                  setGalleryPreviews([]);
-                  setGalleryUrls([]);
-                  setGalleryProgress({});
-                  setGalleryAlts([]);
-                  setError("");
-                  setOk(false);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-black/20 px-5 py-2.5 text-sm hover:bg-black/5 transition"
-              >
-                <FiX /> Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Local styles */}
-      <style jsx>{`
-        .input {
-          @apply w-full rounded-lg border border-black/15 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-black/20;
-        }
-      `}</style>
-    </form>
-  );
-}
-
-/* --------------------------------- Sub UI ---------------------------------- */
-
-function Field({ label, hint, children }) {
-  return (
-    <label className="block">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-neutral-800">{label}</span>
-        {hint && <span className="text-xs text-neutral-500">{hint}</span>}
-      </div>
-      <div className="mt-1">{children}</div>
-    </label>
-  );
-}
-
-function TagInput({ value, onChange, onRemove, chips }) {
-  return (
-    <>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="input border-zinc-300 border-[1px] rounded w-full px-2 py-1 mb-4"
-        placeholder="Residence, Contemporary, Warm Wood"
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const v = e.currentTarget.value.trim();
-            if (!v) return;
-            const next = [...new Set(v.split(",").map((x) => x.trim()).filter(Boolean))];
-            onChange(next.join(", "));
-          }
-        }}
-      />
-      {chips.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {chips.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center gap-2 rounded-full bg-[#F4F1EC] border border-black/10 px-3 py-1 text-xs"
-            >
-              {t}
-              <button
-                type="button"
-                onClick={() => onRemove(t)}
-                className="rounded-full p-0.5 hover:bg-black/10"
-                aria-label={`Remove ${t}`}
-              >
-                <FiX className="h-3 w-3" />
-              </button>
-            </span>
           ))}
         </div>
       )}
-    </>
+
+      <Row>
+        <Field label="Case Study URL"><input className="input border-2 rounded w-full p-2" value={f.caseStudyUrl} onChange={(e)=>onChange("caseStudyUrl", e.target.value)} /></Field>
+        <Field label="Stats (one per line, format: VALUE - LABEL)">
+          <textarea className="input min-h-[90px] border-2 rounded w-full p-2" placeholder="+120% - Conversion lift"
+                    value={f.stats} onChange={(e)=>onChange("stats", e.target.value)} />
+        </Field>
+        <div />
+      </Row>
+
+      <Field label="Schema Markup (JSON-LD)">
+        <textarea
+          className="input min-h-[140px] border-2 rounded w-full p-2 font-mono text-sm"
+          placeholder='{"@context":"https://schema.org","@type":"CreativeWork","name":"Crackpot Café & Bistro"}'
+          value={f.schemaMarkup}
+          onChange={(e) => {
+            const val = e.target.value;
+            onChange("schemaMarkup", val);
+            if (val.trim()) {
+              try { JSON.parse(val); setSchemaValid(true); } catch { setSchemaValid(false); }
+            } else {
+              setSchemaValid(true);
+            }
+          }}
+        />
+        {!schemaValid && f.schemaMarkup.trim() && (
+          <div className="mt-1 text-xs text-amber-700 flex items-center gap-1">
+            <FiAlertCircle /> This doesn’t look like valid JSON. You can still save it.
+          </div>
+        )}
+      </Field>
+
+      <div className="flex items-center gap-3">
+        <button disabled={submitting} className="rounded bg-zinc-900 text-white px-4 py-2 text-sm disabled:opacity-50">
+          {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save Changes")}
+        </button>
+        <button type="button" onClick={()=>history.back()} className="rounded border px-4 py-2 text-sm">Cancel</button>
+      </div>
+    </form>
   );
 }

@@ -1,82 +1,70 @@
-// my-app/src/app/api/feature-projects/[id]/route.js
+// /app/api/feature-projects/[id]/route.js
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
-import { connectDB } from "@/lib/mongodb";
 import FeatureProject from "@/models/FeatureProject";
+import { connectDB } from "@/lib/mongodb";
 
-const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
-const isValidSlug = (slug) => /^[a-z0-9-]+$/.test(String(slug || ""));
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function buildMatch(idParam) {
-  // If it's an ObjectId, allow matching by _id OR slug equal to that string (just in case).
-  // If not an ObjectId, treat it as a slug-only match.
-  if (isObjectId(idParam)) return { $or: [{ _id: idParam }, { slug: String(idParam).toLowerCase() }] };
-  return { slug: String(idParam).toLowerCase() };
-}
-
-/** GET /api/feature-projects/:id  (id = slug or _id) */
+// GET /api/feature-projects/:slug   (only featured:true)
 export async function GET(_req, { params }) {
-  await connectDB();
-  const { id } = params;
+  try {
+    await connectDB();
+    const slug = params.id; // treat the dynamic segment as slug
 
-  // If it's not an ObjectId, enforce slug shape
-  if (!isObjectId(id) && !isValidSlug(id)) {
-    return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    const doc = await FeatureProject.findOne({ slug, featured: true }).lean();
+    if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(doc);
+  } catch (err) {
+    console.error("GET /feature-projects/:slug error:", err);
+    return NextResponse.json({ error: "Failed to fetch project" }, { status: 500 });
   }
-
-  const doc = await FeatureProject.findOne(buildMatch(id)).lean();
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(doc);
 }
 
-/** PATCH /api/feature-projects/:id  (id = slug or _id) */
-export async function PATCH(request, { params }) {
-  await connectDB();
-  const { id } = params;
-
-  if (!isObjectId(id) && !isValidSlug(id)) {
-    return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
-  }
-
-  const body = await request.json();
-
-  // If client tries to change slug, validate it
-  if (typeof body.slug === "string" && !isValidSlug(body.slug)) {
-    return NextResponse.json({ error: "Invalid slug in payload" }, { status: 400 });
-  }
-
-  // Normalize slug (and some fields) if provided
-  if (typeof body.slug === "string") body.slug = body.slug.toLowerCase();
-
+// PATCH /api/feature-projects/:slug   (only featured:true)
+export async function PATCH(req, { params }) {
   try {
-    const doc = await FeatureProject.findOneAndUpdate(
-      buildMatch(id),
+    await connectDB();
+    const slug = params.id;
+    const body = await req.json();
+
+    // Normalize legacy galleryImages -> gallery if needed
+    if ((!body.gallery || body.gallery.length === 0) && Array.isArray(body.galleryImages)) {
+      body.gallery = body.galleryImages.map((src) => ({ src, alt: "" }));
+    }
+
+    const updated = await FeatureProject.findOneAndUpdate(
+      { slug, featured: true },
       { $set: body },
       { new: true, runValidators: true }
     ).lean();
 
-    if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(doc);
+    if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(updated);
   } catch (err) {
-    console.error(err);
+    console.error("PATCH /feature-projects/:slug error:", err);
     if (err?.code === 11000) {
-      return NextResponse.json({ error: "Slug already exists" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Duplicate key", fields: err.keyValue },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: "Failed to update project" }, { status: 500 });
   }
 }
 
-/** DELETE /api/feature-projects/:id  (id = slug or _id) */
+// DELETE /api/feature-projects/:slug   (only featured:true)
 export async function DELETE(_req, { params }) {
-  await connectDB();
-  const { id } = params;
+  try {
+    await connectDB();
+    const slug = params.id;
 
-  if (!isObjectId(id) && !isValidSlug(id)) {
-    return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    const res = await FeatureProject.findOneAndDelete({ slug, featured: true }).lean();
+    if (!res) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /feature-projects/:slug error:", err);
+    return NextResponse.json({ error: "Failed to delete project" }, { status: 500 });
   }
-
-  const deleted = await FeatureProject.findOneAndDelete(buildMatch(id)).lean();
-  if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  return NextResponse.json({ ok: true });
 }
