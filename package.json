@@ -9,12 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@editorjs/editorjs": "^2.30.8",
+    "@editorjs/header": "^2.8.8",
+    "@editorjs/image": "^2.10.3",
+    "@editorjs/list": "^2.0.8",
+    "@editorjs/table": "^2.4.5",
     "@radix-ui/react-slot": "^1.2.3",
     "@tabler/icons-react": "^3.34.1",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.12",
+    "jose": "^6.1.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.542.0",
     "mongoose": "^8.18.0",
