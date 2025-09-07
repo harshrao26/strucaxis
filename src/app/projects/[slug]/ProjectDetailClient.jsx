@@ -2,6 +2,8 @@
 import { useState } from "react";
 import Image from "next/image";
 
+const cloudinaryLoader = ({ src }) => src;
+
 export default function ProjectDetailClient({ project }) {
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
@@ -20,19 +22,20 @@ export default function ProjectDetailClient({ project }) {
       {/* Hero Section */}
       <div className="relative w-full h-[60vh] lg:h-[75vh] overflow-hidden">
         {project.coverImage ? (
-          <img
+          <Image
+            loader={cloudinaryLoader}
             src={project.coverImage}
             alt={project.title}
             fill
+            sizes="100vw"
             priority
             className="object-cover"
-            sizes="100vw"
           />
         ) : (
           <div className="w-full h-full bg-neutral-200" />
         )}
         <div className="absolute inset-0 bg-black/50" />
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 text-center text-white max-w-3xl px-4">
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 text-center text-white max-wxl px-4">
           <h1 className="text-xl lg:text-6xl font-semibold mb-4">
             {project.title}
           </h1>

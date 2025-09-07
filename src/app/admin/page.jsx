@@ -1,12 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FaRegEye, FaRegEyeSlash } from 'react-icons/fa';
 import { FiMail, FiLock } from 'react-icons/fi';
 import Image from 'next/image';
  import logo from '@/assets/logo.png'
+
+export const dynamic = 'force-dynamic';
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-12 text-sm text-neutral-500">Loading…</div>}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,7 +54,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden -my-10 bg-[#F4F1EC]">
+    <div className="relative min-h-screen overflow-hidden my-10 bg-[#F4F1EC]">
       {/* Background accents */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div
@@ -64,27 +75,26 @@ export default function LoginPage() {
       </div>
 
       {/* Shell */}
-      <div className="relative mx-auto flex min-h-screen max-w-[1100px] items-center px-5 py-">
+      <div className="relative mx-auto flex min-h-screen max-w-[1100px] items-center px-5">
         <div className="grid w-full gap-6 rounded-3xl border border-black/10 bg-white/70 backdrop-blur-xl shadow-sm md:grid-cols-2 md:gap-0">
           {/* Brand / Illustration panel */}
-          <aside className="relative hidden md:flex flex-col justify-between rounded-l-3xl bg-gradient-to-b from-[#234D7E] to-[#173352] p-8 text-white">
-            <div className="flex items-center gap-3 bg-w">
+          <aside className="relative hidden md:flex flex-col justify-between rounded-l-3xl bg-gradient-to-b from-[#000000] to-[#232323] p-8 text-white">
+            <div className="flex items-center gap-3">
               <span className='bg-white'>
-                              <Image src={logo} alt="Trygve Studio logo" width={40} height={40} priority />
-
+                <Image src={logo} alt="StrucAxis logo" width={40} height={40} priority />
               </span>
-              <span className="text-lg font-semibold tracking-wide">Trygve Studio</span>
+              <span className="text-lg font-semibold tracking-wide">StrucAxis</span>
             </div>
 
             <div className="mt-8">
               <h2 className="text-3xl font-semibold leading-tight">
-                Welcome back,
+                Welcome back to StrucAxis,
                 <br />
-                Administrator
+                Contractor Portal
               </h2>
               <p className="mt-3 max-w-sm text-white/80">
-                Sign in to access your dashboard and manage Architectural & Interior projects,
-                renders, and more.
+                Sign in to manage construction, interiors &amp; fit-out projects with seamless workforce control,
+                procurement, and in‑house production.
               </p>
             </div>
 
@@ -102,7 +112,7 @@ export default function LoginPage() {
             </div>
 
             <p className="mt-6 text-xs text-white/70">
-              © {new Date().getFullYear()} Trygve Studio Private Limited
+              © {new Date().getFullYear()} StrucAxis — A Trygve Studio Pvt. Ltd. Company
             </p>
           </aside>
 
@@ -110,12 +120,12 @@ export default function LoginPage() {
           <main className="relative flex flex-col justify-center rounded-3xl md:rounded-l-none p-7 md:p-10">
             {/* Logo (mobile) */}
             <div className="mb-3 flex items-center gap-3 md:hidden">
-              <Image src={logo} alt="Trygve Studio logo" width={36} height={36} />
-              <span className="text-base font-semibold text-[#234D7E]">Trygve Studio</span>
+              <Image src={logo} alt="StrucAxis logo" width={36} height={36} />
+              <span className="text-base font-semibold text-[#FF6A00]">StrucAxis</span>
             </div>
 
             <header>
-              <h1 className="text-2xl font-semibold text-[#234D7E]">Sign in</h1>
+              <h1 className="text-2xl font-semibold text-[#FF6A00]">Sign in</h1>
               <p className="mt-1 text-sm text-neutral-600">
                 Use your admin credentials to continue.
               </p>
@@ -143,7 +153,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="username"
-                    className="w-full rounded-lg border border-black/10 bg-white px-10 py-3 outline-none ring-0 transition focus:border-[#234D7E] focus:ring-2 focus:ring-[#234D7E]/20"
+                    className="w-full rounded-lg border border-black/10 bg-white px-10 py-3 outline-none ring-0 transition focus:border-[#FF6A00] focus:ring-2 focus:ring-[#FF6A00]/20"
                   />
                 </div>
               </label>
@@ -162,7 +172,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    className="w-full rounded-lg border border-black/10 bg-white px-10 py-3 pr-12 outline-none ring-0 transition focus:border-[#234D7E] focus:ring-2 focus:ring-[#234D7E]/20"
+                    className="w-full rounded-lg border border-black/10 bg-white px-10 py-3 pr-12 outline-none ring-0 transition focus:border-[#FF6A00] focus:ring-2 focus:ring-[#FF6A00]/20"
                   />
                   <button
                     type="button"
@@ -180,11 +190,11 @@ export default function LoginPage() {
                 <label className="flex items-center gap-2 text-sm text-neutral-700">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-black/20 text-[#234D7E] focus:ring-[#234D7E]"
+                    className="h-4 w-4 rounded border-black/20 text-[#FF6A00] focus:ring-[#FF6A00]"
                   />
                   Remember me
                 </label>
-                <a href="#" className="text-sm text-[#234D7E] underline-offset-2 hover:underline">
+                <a href="#" className="text-sm text-[#FF6A00] underline-offset-2 hover:underline">
                   Forgot password?
                 </a>
               </div>
@@ -192,7 +202,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="mt-4 w-full rounded-lg bg-[#244D7E] py-3 font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                className="mt-4 w-full rounded-lg bg-[#FF6A00] py-3 font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
               >
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
@@ -203,7 +213,6 @@ export default function LoginPage() {
                 <div className="absolute inset-0 top-1/2 -translate-y-1/2 border-t border-black/10" />
               </div>
 
-             
             </form>
           </main>
         </div>

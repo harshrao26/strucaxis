@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import React, { useState } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
-
+ import logo from '@/assets/logo.png'
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -19,7 +20,7 @@ export default function Header() {
     { href: "/about-us", label: "About Us" },
     { href: "/projects", label: "Projects" },
     { href: "/services", label: "Services" },
-    { href: "/inhouse-facilities", label: "Machinery" },
+    { href: "/machinery", label: "Machinery" },
       { href: "/blogs", label: "Blogs" },
     { href: "/career", label: "Career" },
   
@@ -32,25 +33,26 @@ export default function Header() {
         <div className="relative flex items-center justify-between rounded-full bg-black/90 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-black/30 backdrop-blur-md">
 
           {/* Left circular logo/button */}
-          <a
+          <Link
             href="/"
-            className="m-1 ml-2 flex h-12 w-12 items-center justify-center rounded-full bg-white text-black font-semibold tracking-wide select-none hover:scale-105 transition"
+            className="m-1 ml-2 flex h-12   items-center justify-center   text-white font-semibold text-2xl px-4 tracking-wide select-none hover:scale-105 transition"
             aria-label="StrucAxis home"
             title="StrucAxis"
           >
-            SA
-          </a>
+            {/* Struc<span className="text-[#ff4017] ">Axis</span> */}
+            <Image src={logo} alt="StrucAxis logo" className="h-12 w-auto z-50" />
+          </Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-8 font-medium px-4">
             {links.map((l) => (
-              <a
+              <Link
                 key={l.href}
                 href={l.href}
                 className="hover:text-[#FF4017]/100 transition"
               >
                 {l.label}
-              </a>
+              </Link>
             ))}
           </nav>
 

@@ -508,7 +508,7 @@ function Step({ n, title, text }) {
             <p className="mt-2 text-black/60">We update this page as new positions open. You can still send an open application.</p>
             <a
               href="mailto:careers@trygvestudio.com?subject=Open%20application"
-              className="mt-6 inline-flex rounded-lg bg-[#234D7E] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+              className="mt-6 inline-flex rounded-lg bg-[#ff4017] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
               Send resume
             </a>
@@ -549,7 +549,7 @@ function Step({ n, title, text }) {
 
               <div className="mt-6 flex items-center gap-3">
                 <a
-                  className="rounded-lg bg-[#234D7E] text-white px-4 py-2 text-sm font-semibold shadow-[0_0_0_1px_rgba(255,255,255,0.12)] transition hover:opacity-90"
+                  className="rounded-lg bg-[#ff4017] text-white px-4 py-2 text-sm font-semibold shadow-[0_0_0_1px_rgba(255,255,255,0.12)] transition hover:opacity-90"
                   href={`mailto:careers@trygvestudio.com?subject=${encodeURIComponent(job.title)}%20-%20Application`}
                 >
                   Share CV at careers@trygvestudio.com

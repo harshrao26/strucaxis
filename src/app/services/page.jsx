@@ -3,26 +3,12 @@
 import ContactCta from "@/components/ContactCta";
 import React, { useEffect, useState } from "react";
 import {
-  FaTools,
-  FaHardHat,
-  FaCouch,
-  FaDraftingCompass,
-  FaRulerCombined,
-  FaWater,
-  FaIndustry,
-  FaCity,
-  FaBuilding,
-  FaRecycle,
-  FaCheckCircle,
-  FaArrowRight,
-  FaWhatsapp,
-  FaPhoneAlt,
+  FaCheckCircle, FaArrowRight, FaWhatsapp, FaPhoneAlt,
 } from "react-icons/fa";
 
 /**
- * StrucAxis — Services Page (JSX only, TailwindCSS)
- * Drop this into: src/app/services/page.jsx
- * No TypeScript, no external components required.
+ * StrucAxis — Services Page (connected to /api/services)
+ * Fetches services from the backend and renders cards.
  */
 
 export default function ServicesPage() {
@@ -50,6 +36,28 @@ export default function ServicesPage() {
     return () => clearInterval(id);
   }, []);
 
+  // -------- fetch services from backend --------
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  const loadServices = async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/services?sort=order%20-createdAt&limit=100", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load services");
+      setServices(Array.isArray(json.items) ? json.items.filter(s => s?.active !== false) : []);
+    } catch (e) {
+      setErr(e.message || "Failed to load services");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadServices(); }, []);
+
   return (
     <main className="bg-[#F4F1EC] text-gray-900">
       {/* ---------------- HERO ---------------- */}
@@ -69,7 +77,7 @@ export default function ServicesPage() {
         </div>
 
         <div className="relative mx-auto max-w-7xl px-5 sm:px-8 pt-28 pb-20 sm:pt-36 sm:pb-28">
-          <span className="inline-flex items-center gap-2 rounded-full  -white/30 bg-white/10 px-3 py-1 text-xs text-white backdrop-blur">
+          <span className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1 text-xs text-white backdrop-blur">
             Services · Turnkey · Fit-out · Design–Build · Retrofits
           </span>
           <h1 className="mt-6 text-4xl sm:text-6xl font-semibold leading-tight text-white">
@@ -96,7 +104,7 @@ export default function ServicesPage() {
             </a>
             <a
               href="#all-services"
-              className="group inline-flex items-center gap-2 rounded-lg  -white/40 bg-white/10 px-5 py-3 text-white hover:bg-white/20"
+              className="group inline-flex items-center gap-2 rounded-lg bg-white/10 px-5 py-3 text-white hover:bg-white/20"
             >
               Explore Services{" "}
               <FaArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-1" />
@@ -127,62 +135,34 @@ export default function ServicesPage() {
           </a>
         </div>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <ServiceCard
-            icon={<FaHardHat />}
-            title="General Contracting (Turnkey)"
-            img="https://images.unsplash.com/photo-1454496522488-7a8e488e8606?q=80&w=1400&auto=format&fit=crop"
-            points={["Shell & core", "Site management & HSE", "Quality assurance / QA-QC"]}
-          />
-          <ServiceCard
-            icon={<FaCouch />}
-            title="Interior Fit-out (Retail • F&B • Office • Hospitality)"
-            img="https://images.unsplash.com/photo-1521783988139-893ce8e2c6d6?q=80&w=1400&auto=format&fit=crop"
-            points={["Brand-accurate finishes", "Sequenced installation", "Snag-free handover"]}
-          />
-          <ServiceCard
-            icon={<FaDraftingCompass />}
-            title="Design–Build (with Trygve Studio)"
-            img="https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=1400&auto=format&fit=crop"
-            points={["Single-window delivery", "Shop drawings", "Value engineering"]}
-          />
-          <ServiceCard
-            icon={<FaTools />}
-            title="Joinery & Furniture Packages"
-            img="https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1400&auto=format&fit=crop"
-            points={["CNC-enabled carpentry", "PU/veneer/laminate finishes", "On-site installation"]}
-          />
-          <ServiceCard
-            icon={<FaIndustry />}
-            title="Glass, UPVC & Metal Fabrication"
-            img="https://images.unsplash.com/photo-1541976076758-347942db1970?q=80&w=1400&auto=format&fit=crop"
-            points={["Glazing & storefronts", "Windows/doors", "MS/SS & powder-coat"]}
-          />
-          <ServiceCard
-            icon={<FaRulerCombined />}
-            title="Costing/BOQ & Value Engineering"
-            img="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1400&auto=format&fit=crop"
-            points={["Transparent BOQs", "Alternates & equivalences", "Procurement planning"]}
-          />
-          <ServiceCard
-            icon={<FaWater />}
-            title="Specialized Waterproofing"
-            img="https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1400&auto=format&fit=crop"
-            points={["Roofs & wet areas", "Terraces & basements", "Material warranties"]}
-          />
-          <ServiceCard
-            icon={<FaRecycle />}
-            title="Renovation & Retrofits"
-            img="https://images.unsplash.com/photo-1523419409543-8f8d3fd7e69d?q=80&w=1400&auto=format&fit=crop"
-            points={["Live-site works", "Phased execution", "Minimum downtime"]}
-          />
-          <ServiceCard
-            icon={<FaCity />}
-            title="MEP Coordination"
-            img="https://images.unsplash.com/photo-1581090700227-1e37b190418e?q=80&w=1400&auto=format&fit=crop"
-            points={["Shop drawings", "Services sequencing", "Testing & commissioning"]}
-          />
-        </div>
+        {/* state: loading / error / empty / data */}
+        {loading ? (
+          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-72 animate-pulse rounded-2xl bg-white/70 ring-1 ring-zinc-200" />
+            ))}
+          </div>
+        ) : err ? (
+          <div className="mt-8 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {err} — <button className="underline" onClick={loadServices}>retry</button>
+          </div>
+        ) : services.length === 0 ? (
+          <div className="mt-8 rounded-xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500">
+            No services yet.
+          </div>
+        ) : (
+          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {services.map((s) => (
+              <ServiceCard
+                key={s._id || s.slug}
+                title={s.title}
+                img={s.image?.src}
+                alt={s.image?.alt || s.title}
+                points={Array.isArray(s.points) ? s.points.slice(0, 3) : []}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* --------------- INDUSTRIES --------------- */}
@@ -197,10 +177,10 @@ export default function ServicesPage() {
           <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Sector img="https://images.unsplash.com/photo-1528909514045-2fa4ac7a08ba?q=80&w=1400&auto=format&fit=crop" title="Hospitality & F&B" />
             <Sector img="https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1400&auto=format&fit=crop" title="Corporate Offices" />
-            <Sector img="https://images.unsplash.com/photo-1519710164239-da123dc03ef4e?q=80&w=1400&auto=format&fit=crop" title="Retail & Franchise" />
+            <Sector img="https://images.unsplash.com/photo-1562280963-8a5475740a10?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" title="Retail & Franchise" />
             <Sector img="https://images.unsplash.com/photo-1579154204601-01588f351e67?q=80&w=1400&auto=format&fit=crop" title="Healthcare & Clinics" />
             <Sector img="https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1400&auto=format&fit=crop" title="Villas & Residences" />
-            <Sector img="https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=1400&auto=format&fit=crop" title="Institutions & Schools" />
+            <Sector img="https://images.unsplash.com/photo-1694307771413-ab92ba77539b?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" title="Institutions & Schools" />
           </div>
         </div>
       </section>
@@ -219,12 +199,8 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      
-
-   
       {/* --------------- BIG CTA --------------- */}
-           <ContactCta/>
-     
+      <ContactCta/>
     </main>
   );
 }
@@ -233,22 +209,22 @@ export default function ServicesPage() {
 
 function Badge({ children }) {
   return (
-    <div className="rounded-lg  -white/30 bg-white/10 px-3 py-2 text-sm text-white backdrop-blur">
+    <div className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white backdrop-blur">
       {children}
     </div>
   );
 }
 
-function ServiceCard({ icon, title, img, points }) {
+function ServiceCard({ title, img, alt, points }) {
   return (
-    <article className="group overflow-hidden rounded-2xl  bg-white">
+    <article className="group overflow-hidden rounded-2xl bg-white">
       <div className="relative h-48 w-full overflow-hidden">
-        <img src={img} alt={title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        {img ? (
+          <img src={img} alt={alt || title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : (
+          <div className="h-full w-full bg-zinc-100" aria-hidden />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60" />
-        {/* <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-md bg-white/90 px-3 py-1 text-sm">
-          <span className="text-emerald-700">{icon}</span>
-          <span className="font-medium">StrucAxis</span>
-        </div> */}
       </div>
       <div className="p-6">
         <h3 className="text-lg font-semibold">{title}</h3>
@@ -260,9 +236,6 @@ function ServiceCard({ icon, title, img, points }) {
             </li>
           ))}
         </ul>
-        {/* <a href="/projects" className="mt-5 inline-flex items-center gap-2 text-emerald-700 hover:text-emerald-900">
-          View related projects <FaArrowRight />
-        </a> */}
       </div>
     </article>
   );
@@ -270,7 +243,7 @@ function ServiceCard({ icon, title, img, points }) {
 
 function Sector({ img, title }) {
   return (
-    <div className="overflow-hidden rounded-2xl  bg-white">
+    <div className="overflow-hidden rounded-2xl bg-white">
       <div className="relative h-44">
         <img src={img} alt={title} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
@@ -284,40 +257,10 @@ function Sector({ img, title }) {
 
 function Step({ n, title, text }) {
   return (
-    <div className="rounded-xl  bg-white p-6">
+    <div className="rounded-xl bg-white p-6">
       <div className="text-sm font-semibold text-emerald-700">Step {n}</div>
       <h3 className="mt-2 text-lg font-semibold">{title}</h3>
       <p className="mt-2 text-gray-600">{text}</p>
-    </div>
-  );
-}
-
-function Stat({ num, label }) {
-  return (
-    <div className="rounded-xl bg-gray-800 p-6 text-center">
-      <div className="text-4xl font-semibold tracking-tight">{num}</div>
-      <div className="mt-2 text-gray-300">{label}</div>
-    </div>
-  );
-}
-
-function FAQ({ q, a }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-xl  bg-white p-6">
-      <button
-        className="flex w-full items-center justify-between text-left"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className="text-lg font-semibold">{q}</span>
-        <span className={`transition ${open ? "rotate-90" : ""}`}>›</span>
-      </button>
-      <div className={`grid transition-all duration-300 ${open ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-        <div className="overflow-hidden">
-          <p className="text-gray-600">{a}</p>
-        </div>
-      </div>
     </div>
   );
 }

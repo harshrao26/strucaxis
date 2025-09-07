@@ -51,6 +51,8 @@ function FaqItem({ faq }) {
 export default function BlogsClientUI({ blog }) {
   const [mounted, setMounted] = useState(false);
 
+  console.log(blog);
+
   // Safely parse Editor.js content
   const contentData = (() => {
     const raw = blog?.content;

@@ -1,588 +1,545 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { FiUploadCloud, FiX, FiImage, FiCheck, FiTrash2 } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  FiAlertCircle, FiCheckCircle, FiHash, FiLink, FiTag, FiTrash2, FiPlus,
+  FiType, FiUser, FiCalendar, FiMove, FiChevronUp, FiChevronDown, FiFilm,
+  FiImage, FiPlayCircle, FiGlobe, FiCode
+} from "react-icons/fi";
+import CloudinaryUploader from "./CloudinaryUploader";
+import './global.css'
 
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME; // e.g. "your-cloud"
-const UPLOAD_PRESET = "trygve-studio"; // your preset name
+/**
+ * Beautiful, admin-friendly Project Form
+ * - JS/JSX only, Tailwind + React Icons
+ * - Works with your /api/feature-projects endpoints
+ * - Slug helper, tag chips, stats builder
+ * - Gallery upload with ALT fields + reorder
+ * - Soft JSON-LD validation with preview
+ *
+ * Props:
+ *  - mode: "create" | "edit"
+ *  - initial: object (optional)
+ *  - onSubmit: async (payload) => result
+ */
+export default function ProjectForm({ mode = "create", initial = {}, onSubmit }) {
+  const router = useRouter();
 
-export default function ProjectForm() {
-  const [form, setForm] = useState({
-    title: "",
-    type: "Interior",
-    location: "",
-    timeline: "",
-    tags: "", // we’ll still submit as CSV, but show chips live
-    description: "",
-  });
+  // ---------- form state ----------
+  const [f, setF] = useState(() => ({
+    title: initial.title || "",
+    slug: initial.slug || "",
+    client: initial.client || "",
+    year: initial.year || "",
+    description: initial.description || "",
+    coverImage: initial.coverImage || "",
+    coverAlt: initial.coverAlt || "",
+    mediaUrl: initial.mediaUrl || "",
+    caseStudyUrl: initial.caseStudyUrl || "",
+    featured: typeof initial.featured === "boolean" ? initial.featured : true,
 
-  const tagsChips = useMemo(
-    () =>
-      form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-    [form.tags]
-  );
+    // tags (chips)
+    tags: Array.isArray(initial.tags) ? initial.tags : [],
 
-  const [coverFile, setCoverFile] = useState(null);
-  const [coverPreview, setCoverPreview] = useState(null);
-  const [coverUrl, setCoverUrl] = useState("");
-  const [coverProgress, setCoverProgress] = useState(0);
+    // gallery: prefer structured; if only legacy exists, hydrate from that
+    gallery: Array.isArray(initial.gallery) && initial.gallery.length > 0
+      ? initial.gallery
+      : (Array.isArray(initial.galleryImages) ? initial.galleryImages.map((src) => ({ src, alt: "" })) : []),
 
-  const [galleryFiles, setGalleryFiles] = useState([]);
-  const [galleryPreviews, setGalleryPreviews] = useState([]);
-  const [galleryUrls, setGalleryUrls] = useState([]);
-  const [galleryProgress, setGalleryProgress] = useState({}); // index -> %
+    // stats array of { value, label }
+    stats: Array.isArray(initial.stats) ? initial.stats : [],
 
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [ok, setOk] = useState(false);
+    // raw JSON string
+    schemaMarkup: initial.schemaMarkup || "",
+  }));
 
-  const coverInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [schemaValid, setSchemaValid] = useState(true);
+  const [schemaObj, setSchemaObj] = useState(null);
+  const [error, setError] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
 
-  /* ------------------------------ Form handlers ----------------------------- */
+  // ---------- helpers ----------
+  const onChange = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
-  const onChange = (e) => {
-    const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
-  };
+  const slugify = (s) =>
+    s
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/--+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
-  const onRemoveTag = (t) => {
-    const next = tagsChips.filter((x) => x !== t);
-    setForm((f) => ({ ...f, tags: next.join(", ") }));
-  };
+  useEffect(() => {
+    // keep slug neat on title changes if slug is empty (create mode nicety)
+    if (mode === "create" && !f.slug && f.title) {
+      onChange("slug", slugify(f.title));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.title]);
 
-  /* ----------------------------- Upload helpers ----------------------------- */
-
-  const uploadToCloudinary = (file, onProgress) =>
-    new Promise((resolve, reject) => {
-      const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", UPLOAD_PRESET);
-      // fd.append("folder", "trygve/projects"); // optional folder
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", url);
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable && typeof onProgress === "function") {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      });
-
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState === 4) {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const json = JSON.parse(xhr.responseText);
-              resolve(json.secure_url);
-            } catch (err) {
-              reject(new Error("Cloudinary response parse error"));
-            }
-          } else {
-            reject(new Error("Cloudinary upload failed"));
-          }
-        }
-      };
-
-      xhr.send(fd);
-    });
-
-  const handleCoverSelect = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setCoverFile(f);
-    setCoverPreview(URL.createObjectURL(f));
-    setCoverUrl("");
-    setCoverProgress(0);
-    setOk(false);
-  };
-
-  const handleGallerySelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    setGalleryFiles(files);
-    setGalleryPreviews(files.map((f) => URL.createObjectURL(f)));
-    setGalleryUrls([]);
-    setGalleryProgress({});
-    setOk(false);
-  };
-
-  const uploadImages = async () => {
-    if (!coverFile) throw new Error("Please select a cover image");
-
-    setUploading(true);
-    setError("");
+  // live JSON-LD check (soft)
+  useEffect(() => {
+    const raw = f.schemaMarkup?.trim();
+    if (!raw) { setSchemaValid(true); setSchemaObj(null); return; }
     try {
-      // Cover
-      const coverSecure = await uploadToCloudinary(coverFile, setCoverProgress);
-      setCoverUrl(coverSecure);
-
-      // Gallery
-      const urls = [];
-      for (let i = 0; i < galleryFiles.length; i++) {
-        const f = galleryFiles[i];
-        // progress updater per file
-        const onProg = (p) =>
-          setGalleryProgress((prev) => ({ ...prev, [i]: p }));
-        const u = await uploadToCloudinary(f, onProg);
-        urls.push(u);
-      }
-      setGalleryUrls(urls);
-    } finally {
-      setUploading(false);
+      const parsed = JSON.parse(raw);
+      setSchemaValid(true);
+      setSchemaObj(parsed);
+    } catch {
+      setSchemaValid(false);
+      setSchemaObj(null);
     }
+  }, [f.schemaMarkup]);
+
+  const validate = () => {
+    if (!f.title.trim()) return "Title is required.";
+    if (!f.slug.trim()) return "Slug is required.";
+    if (/\s/.test(f.slug)) return "Slug cannot contain spaces.";
+    return null;
   };
 
-  const removeGalleryIndex = (idx) => {
-    const nextFiles = [...galleryFiles];
-    const nextPrevs = [...galleryPreviews];
-    nextFiles.splice(idx, 1);
-    nextPrevs.splice(idx, 1);
-    setGalleryFiles(nextFiles);
-    setGalleryPreviews(nextPrevs);
-    if (galleryUrls.length) {
-      const nextUrls = [...galleryUrls];
-      nextUrls.splice(idx, 1);
-      setGalleryUrls(nextUrls);
-    }
-    setGalleryProgress((prev) => {
-      const copy = { ...prev };
-      delete copy[idx];
-      return copy;
-    });
+  // ---------- tags (chips) ----------
+  const [tagInput, setTagInput] = useState("");
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (!t) return;
+    if (!f.tags.includes(t)) onChange("tags", [...f.tags, t]);
+    setTagInput("");
+  };
+  const removeTag = (t) => onChange("tags", f.tags.filter((x) => x !== t));
+
+  // ---------- stats ----------
+  const addStat = () => onChange("stats", [...f.stats, { value: "", label: "" }]);
+  const updateStat = (i, kv) => {
+    const next = [...f.stats];
+    next[i] = { ...next[i], ...kv };
+    onChange("stats", next);
+  };
+  const removeStat = (i) => {
+    const next = [...f.stats];
+    next.splice(i, 1);
+    onChange("stats", next);
   };
 
-  /* -------------------------------- Submit --------------------------------- */
+  // ---------- gallery ----------
+  const addGalleryImages = (urls) => {
+    const items = Array.isArray(urls) ? urls.map((src) => ({ src, alt: "" })) : [{ src: urls, alt: "" }];
+    onChange("gallery", [...f.gallery, ...items]);
+  };
+  const setCoverFromGallery = (src, alt = "") => {
+    onChange("coverImage", src);
+    if (!f.coverAlt) onChange("coverAlt", alt);
+  };
+  const updateGalleryAlt = (i, alt) => {
+    const next = [...f.gallery];
+    next[i] = { ...next[i], alt };
+    onChange("gallery", next);
+  };
+  const removeGalleryAt = (i) => {
+    const next = [...f.gallery];
+    next.splice(i, 1);
+    onChange("gallery", next);
+  };
+  const moveGallery = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= f.gallery.length) return;
+    const next = [...f.gallery];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange("gallery", next);
+  };
 
+  // uploader adapters to our gallery state
+  const galleryValue = useMemo(() => f.gallery.map((g) => g.src), [f.gallery]);
+
+  // ---------- submit ----------
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setOk(false);
+    setError(null); setOkMsg(null);
+
+    const v = validate();
+    if (v) { setError(v); return; }
+
+    setSubmitting(true);
     try {
-      // ensure uploads done
-      if (!coverUrl || (galleryFiles.length && galleryUrls.length !== galleryFiles.length)) {
-        await uploadImages();
-      }
-
-      setSaving(true);
-
       const payload = {
-        title: form.title.trim(),
-        type: form.type,
-        location: form.location.trim(),
-        timeline: form.timeline.trim(),
-        tags: tagsChips, // send as array to your API (it already accepts array)
-        cover: coverUrl,
-        gallery: galleryUrls,
-        description: form.description.trim(),
+        // basics
+        title: f.title.trim(),
+        slug: slugify(f.slug.trim()),
+        client: f.client.trim(),
+        year: f.year ? Number(f.year) : undefined,
+        description: f.description.trim(),
+
+        // taxonomy
+        tags: f.tags,
+
+        // media
+        coverImage: f.coverImage.trim(),
+        coverAlt: f.coverAlt.trim(),
+        mediaUrl: f.mediaUrl.trim(),
+
+        // gallery structured + legacy for backward-compat
+        gallery: f.gallery.filter((x) => x?.src).map((x) => ({ src: x.src, alt: (x.alt || "").trim() })),
+        galleryImages: f.gallery.filter((x) => x?.src).map((x) => x.src),
+
+        // links & presentation
+        caseStudyUrl: f.caseStudyUrl.trim(),
+        featured: !!f.featured,
+
+        // stats
+        stats: (f.stats || []).filter((s) => s.value || s.label).map((s) => ({
+          value: (s.value || "").trim(),
+          label: (s.label || "").trim(),
+        })),
+
+        // SEO
+        schemaMarkup: f.schemaMarkup, // store raw string (even if invalid)
       };
 
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to save project");
-
-      // success
-      setOk(true);
-
-      // reset
-      setForm({
-        title: "",
-        type: "Interior",
-        location: "",
-        timeline: "",
-        tags: "",
-        description: "",
-      });
-      setCoverFile(null);
-      setCoverPreview(null);
-      setCoverUrl("");
-      setCoverProgress(0);
-      setGalleryFiles([]);
-      setGalleryPreviews([]);
-      setGalleryUrls([]);
-      setGalleryProgress({});
-    } catch (err) {
-      setError(err.message || "Something went wrong");
+      await onSubmit(payload);
+      setOkMsg(mode === "create" ? "Project created 🎉" : "Project updated ✅");
+      setTimeout(() => router.push("/admin/feature-projects"), 700);
+    } catch (e2) {
+      setError(e2?.message || "Something went wrong.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  /* --------------------------------- UI ------------------------------------ */
-
   return (
-    <form onSubmit={handleSubmit} className="p-6 md:p-8">
-      {/* Status banners */}
+    <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+      {/* alerts */}
       {error && (
-        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
-          {error}
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <FiAlertCircle className="mt-0.5" /> <span>{error}</span>
         </div>
       )}
-      {ok && (
-        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm flex items-center gap-2">
-          <FiCheck className="shrink-0" /> Project saved successfully.
+      {okMsg && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          <FiCheckCircle className="mt-0.5" /> <span>{okMsg}</span>
         </div>
       )}
 
-      {/* Form grid */}
-      <div className="grid md:grid-cols-5 gap-6">
-        {/* Left column */}
-        <div className="md:col-span-3">
-          {/* Basics */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5">
-            <h2 className="text-base font-medium">Basics</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Title">
-                <input
-                  name="title"
-                  value={form.title}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
-
-              <Field label="Type">
-                <select
-                  name="type"
-                  value={form.type}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                >
-                  <option>Interior</option>
-                  <option>Architecture</option>
-                </select>
-              </Field>
-
-              <Field label="Location">
-                <input
-                  name="location"
-                  value={form.location}
-                  onChange={onChange}
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
-
-              <Field label="Timeline">
-                <input
-                  name="timeline"
-                  value={form.timeline}
-                  onChange={onChange}
-                  placeholder="Jan 2024 – Jun 2024"
-                  className="input border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1"
-                  required
-                />
-              </Field>
-            </div>
-
-            <Field label="Tags" hint="Comma or Enter to add">
-              <TagInput
-                value={form.tags}
-                onChange={(v) => setForm((f) => ({ ...f, tags: v }))}
-                onRemove={onRemoveTag}
-                chips={tagsChips}
-                className="border-zinc-300 border-[1px] rounded"
-              />
-            </Field>
-
-            <Field label="Description ">
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={onChange}
-                className="input p-4 border-zinc-300 border-[1px] rounded min-h-[120px] w-full "
-                required
-              />
-            </Field>
-          </div>
-
-          {/* Gallery */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5 mt-6">
-            <h2 className="text-base font-medium">Gallery</h2>
-            <div
-              onClick={() => galleryInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const files = Array.from(e.dataTransfer.files || []).filter((f) =>
-                  f.type.startsWith("image/")
-                );
-                if (files.length) {
-                  setGalleryFiles(files);
-                  setGalleryPreviews(files.map((f) => URL.createObjectURL(f)));
-                  setGalleryUrls([]);
-                  setGalleryProgress({});
-                }
-              }}
-              className="mt-4 rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-4 py-8 text-center cursor-pointer hover:bg-[#EFEAE2] transition"
-            >
-              <div className="flex items-center justify-center gap-2 text-neutral-700">
-                <FiImage />
-                <span className="text-sm">Drag & drop images here, or click to browse</span>
-              </div>
+      {/* basics */}
+      <Section title="Basics" icon={<FiType />}>
+        <Grid cols={3}>
+          <Field label="Title *" icon={<FiType />}>
+            <input
+              className="input w-full"
+              value={f.title}
+              onChange={(e) => onChange("title", e.target.value)}
+              placeholder="Crackpot Café & Bistro"
+            />
+          </Field>
+          <Field label="Slug *" icon={<FiHash />} hint="lowercase, hyphen separated">
+            <div className="flex items-stretch gap-2">
               <input
-                ref={galleryInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  setGalleryFiles(files);
-                  setGalleryPreviews(files.map((f) => URL.createObjectURL(f)));
-                  setGalleryUrls([]);
-                  setGalleryProgress({});
-                }}
+                className="input w-full"
+                value={f.slug}
+                onChange={(e) => onChange("slug", slugify(e.target.value))}
+                placeholder="crackpot-cafe-bistro"
               />
+              <button
+                type="button"
+                onClick={() => onChange("slug", slugify(f.title || f.slug))}
+                className="btn-subtle"
+              >
+                Auto
+              </button>
             </div>
+          </Field>
+          <Field label="Client" icon={<FiUser />}>
+            <input
+              className="input w-full"
+              value={f.client}
+              onChange={(e) => onChange("client", e.target.value)}
+              placeholder="Crackpot Hospitality"
+            />
+          </Field>
+        </Grid>
 
-            {(galleryPreviews.length > 0 || galleryUrls.length > 0) && (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {(galleryUrls.length ? galleryUrls : galleryPreviews).map((src, i) => {
-                  const done = Boolean(galleryUrls[i]);
-                  const prog = galleryProgress[i] ?? (done ? 100 : 0);
-                  return (
-                    <div key={i} className="group relative rounded-xl overflow-hidden border border-black/10 bg-white">
-                      <img src={src} alt={`Gallery ${i + 1}`} className="h-28 w-full object-cover" />
-                      {/* Remove button */}
+        <Grid cols={3}>
+          <Field label="Year" icon={<FiCalendar />}>
+            <input
+              className="input w-full"
+              value={f.year}
+              onChange={(e) => onChange("year", e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="2025"
+              inputMode="numeric"
+            />
+          </Field>
+
+          <Field label="Featured">
+            <select
+              className="input w-full"
+              value={String(f.featured)}
+              onChange={(e) => onChange("featured", e.target.value === "true")}
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </Field>
+
+          <Field label="Case Study URL" icon={<FiLink />}>
+            <input
+              className="input w-full"
+              value={f.caseStudyUrl}
+              onChange={(e) => onChange("caseStudyUrl", e.target.value)}
+              placeholder="https://example.com/case-study"
+            />
+          </Field>
+        </Grid>
+
+        <Field label="Description">
+          <textarea
+            className="input min-h-[140px] w-full"
+            value={f.description}
+            onChange={(e) => onChange("description", e.target.value)}
+            placeholder="Long-form description…"
+          />
+        </Field>
+      </Section>
+
+      {/* tags */}
+      <Section title="Tags" icon={<FiTag />}>
+        <div className="flex flex-wrap items-center gap-2">
+          {f.tags.map((t) => (
+            <span key={t} className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-700">
+              {t}
+              <button type="button" onClick={() => removeTag(t)} className="rounded-full p-0.5 hover:bg-zinc-200">
+                <FiTrash2 />
+              </button>
+            </span>
+          ))}
+          <div className="flex items-stretch gap-2">
+            <input
+              className="input"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+              placeholder="Add a tag (e.g., Web)"
+            />
+            <button type="button" onClick={addTag} className="btn-subtle"><FiPlus /> Add</button>
+          </div>
+        </div>
+      </Section>
+
+      {/* media */}
+      <Section title="Media" icon={<FiImage />}>
+        <Grid cols={3}>
+          <Field label="Cover Image" icon={<FiImage />} hint="Used on cards & hero">
+            <CloudinaryUploader
+              label="Upload cover image"
+              multiple={false}
+              value={f.coverImage}
+              onChange={(url) => onChange("coverImage", url)}
+            />
+            {f.coverImage && (
+              <div className="mt-3 overflow-hidden rounded-lg border">
+                <img src={f.coverImage} alt="" className="h-36 w-full object-cover" />
+              </div>
+            )}
+          </Field>
+
+          <Field label="Cover Alt Text (SEO)">
+            <input
+              className="input w-full"
+              value={f.coverAlt}
+              onChange={(e) => onChange("coverAlt", e.target.value)}
+              placeholder="e.g., Contemporary café interior with warm lighting"
+            />
+          </Field>
+
+          <Field label="Hover Preview Video (mp4/webm)" icon={<FiPlayCircle />}>
+            <input
+              className="input w-full"
+              value={f.mediaUrl}
+              onChange={(e) => onChange("mediaUrl", e.target.value)}
+              placeholder="https://res.cloudinary.com/.../preview.webm"
+            />
+          </Field>
+        </Grid>
+
+        {/* gallery */}
+        <Field label="Gallery Images" icon={<FiFilm />} hint="Upload multiple images; set ALT text & reorder.">
+          <CloudinaryUploader
+            label="Upload gallery images"
+            multiple
+            value={galleryValue}
+            onChange={(arrOrStr) => {
+              const arr = Array.isArray(arrOrStr) ? arrOrStr : [arrOrStr];
+              addGalleryImages(arr);
+            }}
+          />
+
+          {f.gallery.length > 0 ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {f.gallery.map((g, i) => (
+                <div key={g.src + i} className="rounded-lg border bg-white p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <img src={g.src} alt="" className="h-24 w-32 rounded border object-cover" />
                       <button
                         type="button"
-                        onClick={() => removeGalleryIndex(i)}
-                        className="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 border border-black/10 opacity-0 group-hover:opacity-100 transition"
-                        aria-label="Remove image"
+                        title="Set as cover"
+                        onClick={() => setCoverFromGallery(g.src, g.alt)}
+                        className="absolute bottom-1 left-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] ring-1 ring-zinc-200 hover:bg-white"
                       >
-                        <FiTrash2 className="text-neutral-700" />
+                        Set cover
                       </button>
-                      {/* Progress */}
-                      {!done && (uploading || prog > 0) && (
-                        <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/10">
-                          <div className="h-full bg-black/80 transition-[width] duration-150" style={{ width: `${prog}%` }} />
-                        </div>
-                      )}
-                      {/* Done badge */}
-                      {done && (
-                        <span className="absolute top-2 left-2 rounded-full bg-black text-white text-[10px] px-2 py-1 flex items-center gap-1">
-                          <FiCheck /> Uploaded
-                        </span>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="md:col-span-2">
-          {/* Cover */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5">
-            <h2 className="text-base font-medium">Cover</h2>
-            <div
-              onClick={() => coverInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const f = e.dataTransfer.files?.[0];
-                if (f && f.type.startsWith("image/")) {
-                  setCoverFile(f);
-                  setCoverPreview(URL.createObjectURL(f));
-                  setCoverUrl("");
-                  setCoverProgress(0);
-                }
-              }}
-              className="mt-4 rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-4 py-10 text-center cursor-pointer hover:bg-[#EFEAE2] transition"
-            >
-              <div className="flex items-center justify-center gap-2 text-neutral-700">
-                <FiUploadCloud />
-                <span className="text-sm">
-                  Drag & drop cover image here, or click to browse
-                </span>
-              </div>
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleCoverSelect}
-              />
-            </div>
-
-            {(coverPreview || coverUrl) && (
-              <div className="mt-4 relative rounded-xl overflow-hidden border border-black/10 bg-white">
-                <img
-                  src={coverUrl || coverPreview}
-                  alt="Cover preview"
-                  className="h-40 w-full object-cover"
-                />
-                {/* progress bar */}
-                {!coverUrl && (uploading || coverProgress > 0) && (
-                  <div className="absolute inset-x-0 bottom-0 h-1.5 bg-black/10">
-                    <div
-                      className="h-full bg-black/80 transition-[width] duration-150"
-                      style={{ width: `${coverProgress}%` }}
-                    />
+                    <div className="flex-1">
+                      <div className="text-xs mb-1 text-zinc-600">Alt text</div>
+                      <input
+                        className="input w-full"
+                        value={g.alt || ""}
+                        onChange={(e) => updateGalleryAlt(i, e.target.value)}
+                        placeholder="Describe image content (SEO & a11y)"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => moveGallery(i, -1)} className="btn-icon" title="Move up"><FiChevronUp /></button>
+                          <button type="button" onClick={() => moveGallery(i, 1)} className="btn-icon" title="Move down"><FiChevronDown /></button>
+                        </div>
+                        <button type="button" onClick={() => removeGalleryAt(i)} className="btn-danger text-xs">
+                          <FiTrash2 /> Remove
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                )}
-                {coverUrl && (
-                  <span className="absolute top-2 left-2 rounded-full bg-black text-white text-[10px] px-2 py-1 flex items-center gap-1">
-                    <FiCheck /> Uploaded
-                  </span>
-                )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded border border-dashed p-6 text-center text-sm text-zinc-500">
+              No gallery images yet. Upload a few to showcase the project ✨
+            </div>
+          )}
+        </Field>
+      </Section>
+
+      {/* stats */}
+      <Section title="Impact Stats" icon={<FiMove />}>
+        {f.stats.length === 0 && (
+          <div className="rounded border border-dashed p-4 text-sm text-zinc-500">No stats yet.</div>
+        )}
+        <div className="space-y-3">
+          {f.stats.map((s, i) => (
+            <div key={i} className="grid gap-2 md:grid-cols-[1fr,2fr,auto]">
+              <input
+                className="input"
+                value={s.value}
+                onChange={(e) => updateStat(i, { value: e.target.value })}
+                placeholder="+120%"
+              />
+              <input
+                className="input"
+                value={s.label}
+                onChange={(e) => updateStat(i, { label: e.target.value })}
+                placeholder="Conversion lift"
+              />
+              <button type="button" onClick={() => removeStat(i)} className="btn-danger"><FiTrash2 /> Remove</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addStat} className="btn-subtle mt-3"><FiPlus /> Add stat</button>
+      </Section>
+
+      {/* SEO */}
+      <Section title="SEO (JSON-LD)" icon={<FiCode />}>
+        <Grid cols={2}>
+          <Field label="Schema Markup (JSON-LD raw)">
+            <textarea
+              className="input min-h-[160px] w-full font-mono text-[12px]"
+              value={f.schemaMarkup}
+              onChange={(e) => onChange("schemaMarkup", e.target.value)}
+              placeholder='{"@context":"https://schema.org","@type":"CreativeWork","name":"Crackpot Café & Bistro"}'
+            />
+            {!schemaValid && f.schemaMarkup.trim() && (
+              <div className="mt-1 text-xs text-amber-700 flex items-center gap-1">
+                <FiAlertCircle /> This doesn’t look like valid JSON. You can still save it.
               </div>
             )}
+          </Field>
 
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={uploadImages}
-                disabled={!coverFile || uploading}
-                className="inline-flex items-center gap-2 rounded-full border border-black px-4 py-2 text-sm hover:bg-black hover:text-white transition disabled:opacity-50"
-              >
-                {uploading ? (
-                  <>
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-black/40 border-t-black animate-spin" />
-                    Uploading…
-                  </>
-                ) : (
-                  <>
-                    <FiUploadCloud />
-                    Upload Images
-                  </>
-                )}
-              </button>
-
-              {(coverFile || galleryFiles.length > 0) && !uploading && (
-                <span className="text-xs text-neutral-600">
-                  Ready to upload {coverFile ? "cover" : ""}{galleryFiles.length ? ` + ${galleryFiles.length} gallery` : ""}.
-                </span>
+          <Field label="Quick Preview" hint="Rendered from parsed JSON (read-only)">
+            <div className="rounded-lg border bg-zinc-50 p-3 text-xs">
+              {schemaObj ? (
+                <pre className="whitespace-pre-wrap break-words">{JSON.stringify(schemaObj, null, 2)}</pre>
+              ) : (
+                <div className="text-zinc-500">No valid JSON detected.</div>
               )}
             </div>
-          </div>
+          </Field>
+        </Grid>
+      </Section>
 
-          {/* Actions */}
-          <div className="rounded-2xl border border-black/10 bg-white/80 p-5 mt-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                disabled={saving || uploading || !coverFile}
-                className="inline-flex items-center gap-2 rounded-full border border-black px-5 py-2.5 text-sm hover:bg-black hover:text-white transition disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-black/40 border-t-black animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  <>
-                    <FiCheck /> Save Project
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setForm({
-                    title: "",
-                    type: "Interior",
-                    location: "",
-                    timeline: "",
-                    tags: "",
-                    description: "",
-                  });
-                  setCoverFile(null);
-                  setCoverPreview(null);
-                  setCoverUrl("");
-                  setCoverProgress(0);
-                  setGalleryFiles([]);
-                  setGalleryPreviews([]);
-                  setGalleryUrls([]);
-                  setGalleryProgress({});
-                  setError("");
-                  setOk(false);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-black/20 px-5 py-2.5 text-sm hover:bg-black/5 transition"
-              >
-                <FiX /> Reset
-              </button>
-            </div>
-          </div>
+      {/* actions */}
+      <div className="flex items-center gap-3 pt-2">
+        <button disabled={submitting} className="btn-primary">
+          {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save Changes")}
+        </button>
+        <button type="button" onClick={() => history.back()} className="btn-plain">Cancel</button>
+        <div className="ml-auto text-xs text-zinc-500 flex items-center gap-2">
+          <FiGlobe /> Slug will be used for fetching this project.
         </div>
       </div>
-
-      {/* Local styles for inputs (premium, consistent) */}
-      <style jsx>{`
-        .input {
-          @apply w-full rounded-lg border border-black/15 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-black/20;
-        }
-      `}</style>
     </form>
   );
 }
 
-/* --------------------------------- Sub UI ---------------------------------- */
+/* ---------- tiny UI helpers (local to this file) ---------- */
 
-function Field({ label, hint, children }) {
+function Section({ title, icon, children }) {
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white p-4 md:p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700">{icon || <FiType />}</div>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid({ cols = 3, children }) {
+  const cls = cols === 2 ? "md:grid-cols-2" : cols === 1 ? "md:grid-cols-1" : "md:grid-cols-3";
+  return <div className={`grid gap-3 ${cls}`}>{children}</div>;
+}
+
+function Field({ label, hint, icon, children }) {
   return (
     <label className="block">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-neutral-800">{label}</span>
-        {hint && <span className="text-xs text-neutral-500">{hint}</span>}
+      <div className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-800">
+        {icon ? <span className="text-zinc-500">{icon}</span> : null}
+        <span>{label}</span>
       </div>
-      <div className="mt-1">{children}</div>
+      {children}
+      {hint && <div className="mt-1 text-xs text-zinc-500">{hint}</div>}
     </label>
   );
 }
 
-function TagInput({ value, onChange, onRemove, chips }) {
-  return (
-    <>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="input border-zinc-300 border-[1px] rounded w-full px-2 py-1 mb-4"
-        placeholder="Residence, Contemporary, Warm Wood"
-        
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const v = e.currentTarget.value.trim();
-            if (!v) return;
-            const next = [...new Set(v.split(",").map((x) => x.trim()).filter(Boolean))];
-            onChange(next.join(", "));
-          }
-        }}
-      />
-      {chips.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {chips.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center gap-2 rounded-full bg-[#F4F1EC] border border-black/10 px-3 py-1 text-xs"
-            >
-              {t}
-              <button
-                type="button"
-                onClick={() => onRemove(t)}
-                className="rounded-full p-0.5 hover:bg-black/10"
-                aria-label={`Remove ${t}`}
-              >
-                <FiX className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </>
-  );
+/* ---------- minimal Tailwind utility classes used in this file ----------
+
+  .input      => rounded border-2 px-3 py-2 outline-none focus:border-zinc-300 border-zinc-200 bg-white
+  .btn-primary=> rounded bg-zinc-900 text-white px-4 py-2 text-sm hover:bg-black disabled:opacity-50
+  .btn-plain  => rounded border px-4 py-2 text-sm
+  .btn-subtle => inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-50
+  .btn-icon   => inline-flex items-center justify-center rounded border border-zinc-200 bg-white p-1.5 hover:bg-zinc-50
+  .btn-danger => inline-flex items-center gap-2 rounded border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50
+
+Add these to your global CSS if you prefer semantic utilities:
+
+@layer components {
+  .input { @apply rounded border-2 px-3 py-2 outline-none focus:border-zinc-300 border-zinc-200 bg-white; }
+  .btn-primary { @apply rounded bg-zinc-900 text-white px-4 py-2 text-sm hover:bg-black disabled:opacity-50; }
+  .btn-plain { @apply rounded border px-4 py-2 text-sm; }
+  .btn-subtle { @apply inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-50; }
+  .btn-icon { @apply inline-flex items-center justify-center rounded border border-zinc-200 bg-white p-1.5 hover:bg-zinc-50; }
+  .btn-danger { @apply inline-flex items-center gap-2 rounded border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50; }
 }
+
+-------------------------------------------------------------------------- */

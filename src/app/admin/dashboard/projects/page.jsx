@@ -1,400 +1,271 @@
 "use client";
 
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { FiEdit2, FiPlus, FiSearch, FiTrash2, FiX, FiUploadCloud, FiCheck } from "react-icons/fi";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  FiPlus, FiSearch, FiTrash2, FiEdit2, FiRefreshCw,
+  FiTag, FiChevronLeft, FiChevronRight, FiExternalLink
+} from "react-icons/fi";
 
-// ------------ Config ------------
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = "trygve-studio";
-const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET || ""; // optional: mirrors ADMIN_SECRET
+export const dynamic = "force-dynamic";
 
-// ------------ Helpers ------------
-async function uploadToCloudinary(file, onProgress) {
-  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", UPLOAD_PRESET);
+const Badge = ({ children }) => (
+  <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700 ring-1 ring-inset ring-zinc-200">
+    {children}
+  </span>
+);
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", endpoint);
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && typeof onProgress === "function") {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 4) {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const json = JSON.parse(xhr.responseText);
-            resolve(json.secure_url);
-          } catch {
-            reject(new Error("Cloudinary parse error"));
-          }
-        } else reject(new Error("Cloudinary upload failed"));
-      }
-    };
-    xhr.send(fd);
-  });
-}
-
-function SkeletonCard() {
-  return (
-    <div className="animate-pulse rounded-2xl overflow-hidden border border-black/10 bg-white">
-      <div className="aspect-[4/3] bg-neutral-200" />
-      <div className="p-4 space-y-3">
-        <div className="h-3 w-20 bg-neutral-200 rounded" />
-        <div className="h-4 w-2/3 bg-neutral-200 rounded" />
-        <div className="h-3 w-full bg-neutral-200 rounded" />
-        <div className="flex gap-2 mt-3">
-          <div className="h-5 w-12 bg-neutral-200 rounded-full" />
-          <div className="h-5 w-12 bg-neutral-200 rounded-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ------------ Editor Modal ------------
-function Editor({ open, onClose, initial, onSaved }) {
-  const editing = Boolean(initial?._id);
-  const [form, setForm] = useState(() => ({
-    title: initial?.title || "",
-    type: initial?.type || "Interior",
-    location: initial?.location || "",
-    timeline: initial?.timeline || "",
-    tags: (initial?.tags || []).join(", "),
-    description: initial?.description || "",
-    cover: initial?.cover || "",
-    gallery: initial?.gallery || [],
-  }));
-
-  const [coverFile, setCoverFile] = useState(null);
-  const [coverProg, setCoverProg] = useState(0);
-  const [galleryFiles, setGalleryFiles] = useState([]);
-  const [galleryProg, setGalleryProg] = useState({});
-
+function ConfirmButton({ onConfirm, children, className = "" }) {
+  const [ask, setAsk] = useState(false);
   useEffect(() => {
-    if (!open) return;
-    setForm({
-      title: initial?.title || "",
-      type: initial?.type || "Interior",
-      location: initial?.location || "",
-      timeline: initial?.timeline || "",
-      tags: (initial?.tags || []).join(", "),
-      description: initial?.description || "",
-      cover: initial?.cover || "",
-      gallery: initial?.gallery || [],
-    });
-    setCoverFile(null);
-    setCoverProg(0);
-    setGalleryFiles([]);
-    setGalleryProg({});
-  }, [open, initial]);
+    if (!ask) return;
+    const t = setTimeout(() => setAsk(false), 2500);
+    return () => clearTimeout(t);
+  }, [ask]);
+  return (
+    <button
+      onClick={() => (ask ? onConfirm() : setAsk(true))}
+      className={`inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm transition hover:bg-zinc-50 ${ask ? "border-red-300 text-red-700 bg-red-50" : "border-zinc-200"} ${className}`}
+    >
+      {ask ? "Sure?" : children}
+    </button>
+  );
+}
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+export default function ProjectsAdmin() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl mt-20 px-4 py-8 text-sm text-neutral-500">Loading projects…</div>}>
+      <ProjectsAdminInner />
+    </Suspense>
+  );
+}
 
-  const handleSave = async () => {
-    // Upload cover if selected
-    let coverUrl = form.cover;
-    if (coverFile) {
-      coverUrl = await uploadToCloudinary(coverFile, setCoverProg);
+function ProjectsAdminInner() {
+  const router = useRouter();
+  const sp = useSearchParams();
+
+  const [data, setData] = useState({ items: [], page: 1, pages: 1, total: 0, limit: 20 });
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const page   = Number(sp.get("page") || 1);
+  const limit  = Number(sp.get("limit") || 12);
+  const search = sp.get("search") || "";
+  const tag    = sp.get("tag") || "";
+  const sort   = sp.get("sort") || "-createdAt";
+
+  const q = useMemo(() => {
+    const u = new URLSearchParams();
+    u.set("page", String(page));
+    u.set("limit", String(limit));
+    if (search) u.set("search", search);
+    if (tag) u.set("tag", tag);
+    if (sort) u.set("sort", sort);
+    return u.toString();
+  }, [page, limit, search, tag, sort]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/projects?${q}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load");
+      setData(json);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
-    // Upload any new gallery files
-    const newGalleryUrls = [];
-    for (let i = 0; i < galleryFiles.length; i++) {
-      const u = await uploadToCloudinary(galleryFiles[i], (p) =>
-        setGalleryProg((prev) => ({ ...prev, [i]: p }))
-      );
-      newGalleryUrls.push(u);
-    }
-
-    const payload = {
-      title: form.title.trim(),
-      type: form.type,
-      location: form.location.trim(),
-      timeline: form.timeline.trim(),
-      tags: form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      cover: coverUrl,
-      gallery: [...form.gallery, ...newGalleryUrls],
-      description: form.description.trim(),
-    };
-
-    const url = editing ? `/api/projects/${initial._id}` : `/api/projects`;
-    const method = editing ? "PUT" : "POST";
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(ADMIN_SECRET ? { "x-admin-secret": ADMIN_SECRET } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "Save failed");
-    onSaved(json);
-    onClose();
   };
 
-  if (!open) return null;
+  useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [q]);
+
+  const updateSearch = (kv) => {
+    const u = new URLSearchParams(sp.toString());
+    Object.entries(kv).forEach(([k, v]) => (v ? u.set(k, v) : u.delete(k)));
+    router.push(`/admin/dashboard/projects?${u.toString()}`);
+  };
+
+  const handleDelete = async (slug) => {
+    try {
+      setBusyId(slug);
+      const res = await fetch(`/api/projects/${encodeURIComponent(slug)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      await fetchData();
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[200]   bg-black/60 backdrop-blur-sm flex items-start justify-center md:px-0 px-4">
-      <div className="w-full max-w-7xl mt-10 bg-white rounded-2xl overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-neutral-600">
-              {editing ? "Edit Project" : "New Project"}
-            </div>
-            <h3 className="text-xl font-semibold">{form.title || "Untitled"}</h3>
-          </div>
-          <button onClick={onClose} className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-black/10 hover:bg-neutral-50">
-            <FiX />
-          </button>
+    <div className="mx-auto max-w-7xl mt-20 px-4 py-8">
+      {/* header */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Projects <span className="text-sm align-top text-zinc-400">🧩</span></h1>
+          <p className="text-sm text-zinc-500">All non-featured work lives here.</p>
         </div>
-
-        <div className="p-5 grid md:grid-cols-2 gap-5">
-          <div className="space-y-3">
-            <Field label="Title">
-              <input className="input  border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.title} onChange={(e) => set("title", e.target.value)} />
-            </Field>
-            <Field label="Type">
-              <select className="input  border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.type} onChange={(e) => set("type", e.target.value)}>
-                <option>Interior</option>
-                <option>Architecture</option>
-              </select>
-            </Field>
-            <Field label="Location">
-              <input className="input  border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.location} onChange={(e) => set("location", e.target.value)} />
-            </Field>
-            <Field label="Timeline">
-              <input className="input  border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.timeline} onChange={(e) => set("timeline", e.target.value)} placeholder="Jan 2024 – Jun 2024" />
-            </Field>
-            <Field label="Tags (Comma Seperated)">
-              <input className="input   border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.tags} onChange={(e) => set("tags", e.target.value)} placeholder="Residence, Wood, USA" />
-              <div className="mt-2 flex flex-wrap gap-2">
-                {form.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
-                  <span key={t} className="rounded-full bg-[#F4F1EC] border border-black/10 px-3 py-1 text-xs">{t}</span>
-                ))}
-              </div>
-            </Field>
-          </div>
-
-          <div className="space-y-3">
-            <Field label="Description">
-              <textarea className="input min-h-[120px] border-zinc-300 border-[1px] rounded w-full px-2 mb-4 py-1" value={form.description} onChange={(e) => set("description", e.target.value)} />
-            </Field>
-
-            <Field label="Cover">
-              <div className="rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-3 py-3">
-                <div className="flex items-center gap-2">
-                  <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} />
-                  <span className="text-xs text-neutral-600">Pick a new file to replace cover</span>
-                </div>
-                {(form.cover || coverFile) && (
-                  <div className="mt-2">
-                    <img src={coverFile ? URL.createObjectURL(coverFile) : form.cover} alt="cover" className="h-28 w-full object-cover rounded-md border border-black/10" />
-                    {!!coverFile && coverProg > 0 && coverProg < 100 && (
-                      <div className="mt-1 h-1.5 bg-black/10">
-                        <div className="h-full bg-black/80" style={{ width: `${coverProg}%` }} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Field>
-
-            <Field label="Gallery">
-              <div className="rounded-xl border border-dashed border-black/20 bg-[#F4F1EC] px-3 py-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    setGalleryFiles(files);
-                  }}
-                />
-                {(form.gallery.length > 0 || galleryFiles.length > 0) && (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {form.gallery.map((src, i) => (
-                      <img key={`old-${i}`} src={src} className="h-20 w-full object-cover rounded border border-black/10" alt="" />
-                    ))}
-                    {galleryFiles.map((f, i) => (
-                      <div key={`new-${i}`}>
-                        <img src={URL.createObjectURL(f)} className="h-20 w-full object-cover rounded border border-black/10" alt="" />
-                        {galleryProg[i] > 0 && galleryProg[i] < 100 && (
-                          <div className="mt-1 h-1.5 bg-black/10">
-                            <div className="h-full bg-black/80" style={{ width: `${galleryProg[i]}%` }} />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Field>
-          </div>
-        </div>
-
-        <div className="px-5 py-4 border-t flex items-center justify-end gap-3">
-          <button onClick={onClose} className="rounded-full border border-black/20 px-4 py-2 text-sm hover:bg-black/5">Cancel</button>
-          <button onClick={handleSave} className="inline-flex items-center gap-2 rounded-full border border-black px-5 py-2 text-sm hover:bg-black hover:text-white">
-            <FiUploadCloud /> Save
+        <div className="flex items-center gap-2">
+          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50">
+            <FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh
           </button>
+          <Link href="/admin/dashboard/projects/new" className="inline-flex items-center gap-2 rounded bg-zinc-900 px-3 py-2 text-sm text-white hover:bg-black">
+            <FiPlus /> New Project
+          </Link>
         </div>
       </div>
 
-      <style jsx>{`
-        .input { @apply w-full rounded-lg border border-black/15 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-black/20; }
-      `}</style>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <div className="text-sm  text-neutral-800 mb-1">{label}</div>
-      {children}
-    </label>
-  );
-}
-
-// ------------ Admin Page ------------
-export default function AdminProjectsPage() {
-  const [projects, setProjects] = useState([]);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [current, setCurrent] = useState(null);
-
-  const fetchAll = async () => {
-    setLoading(true);
-    const res = await fetch("/api/projects", { cache: "no-store" });
-    const json = await res.json();
-    const arr = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-    setProjects(arr);
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchAll(); }, []);
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return projects;
-    return projects.filter((p) =>
-      (p.title || "").toLowerCase().includes(s) ||
-      (p.location || "").toLowerCase().includes(s) ||
-      (Array.isArray(p.tags) ? p.tags.join(" ") : "").toLowerCase().includes(s)
-    );
-  }, [projects, q]);
-
-  const onCreate = () => { setCurrent(null); setEditorOpen(true); };
-  const onEdit = (p) => { setCurrent(p); setEditorOpen(true); };
-
-  const onDelete = async (p) => {
-    if (!confirm(`Delete "${p.title}"? This cannot be undone.`)) return;
-    // optimistic
-    const prev = projects;
-    setProjects((arr) => arr.filter((x) => x._id !== p._id));
-    const res = await fetch(`/api/projects/${p._id}`, {
-      method: "DELETE",
-      headers: ADMIN_SECRET ? { "x-admin-secret": ADMIN_SECRET } : {},
-    });
-    if (!res.ok) {
-      alert("Failed to delete");
-      setProjects(prev);
-    }
-  };
-
-  const onSaved = (saved) => {
-    // merge into list
-    setProjects((arr) => {
-      const id = saved._id;
-      const idx = arr.findIndex((p) => p._id === id);
-      if (idx === -1) return [saved, ...arr];
-      const next = [...arr];
-      next[idx] = saved;
-      return next;
-    });
-  };
-
-  return (
-    <main className="min-h-screen bg-[#F4F1EC]">
-      <section className="max-w-7xl mx-auto md:px-0 px-4 pt-10 pb-12">
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-          <div>
-            <p className="text-xs tracking-wider uppercase text-neutral-600">Dashboard</p>
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Projects</h1>
-            <p className="mt-2 text-neutral-700">Create, edit, or delete projects.</p>
+      {/* toolbar */}
+      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="relative">
+          <FiSearch className="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-zinc-400" />
+          <input
+            defaultValue={search}
+            onKeyDown={(e) => e.key === "Enter" && updateSearch({ search: e.currentTarget.value, page: "1" })}
+            placeholder="Search title, client, tag…"
+            className="w-full rounded-lg border border-zinc-200 bg-white pl-10 pr-3 py-2.5 text-sm outline-none ring-0 focus:border-zinc-300"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <FiTag className="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-zinc-400" />
+            <input
+              defaultValue={tag}
+              onKeyDown={(e) => e.key === "Enter" && updateSearch({ tag: e.currentTarget.value, page: "1" })}
+              placeholder="Filter by tag (e.g., SaaS)"
+              className="w-full rounded-lg border border-zinc-200 bg-white pl-10 pr-3 py-2.5 text-sm outline-none focus:border-zinc-300"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-              <input
-                placeholder="Search projects…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="pl-9 pr-3 h-10 rounded-full border border-black/15 bg-white outline-none focus:ring-2 focus:ring-black/20"
-              />
+          <button
+            onClick={() => updateSearch({ search: "", tag: "", page: "1" })}
+            className="rounded border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50"
+          >
+            Clear
+          </button>
+        </div>
+        <div>
+          <select
+            defaultValue={sort}
+            onChange={(e) => updateSearch({ sort: e.target.value })}
+            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm"
+          >
+            <option value="-createdAt">Newest first</option>
+            <option value="createdAt">Oldest first</option>
+            <option value="-year">Year desc</option>
+            <option value="year">Year asc</option>
+            <option value="title">Title A–Z</option>
+            <option value="-title">Title Z–A</option>
+          </select>
+        </div>
+      </div>
+
+      {/* grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-zinc-200 bg-white p-4">
+              <div className="h-40 w-full rounded-lg bg-zinc-100" />
+              <div className="mt-4 h-4 w-1/2 rounded bg-zinc-100" />
+              <div className="mt-2 h-3 w-1/3 rounded bg-zinc-100" />
+              <div className="mt-3 flex gap-2">
+                <div className="h-6 w-12 rounded-full bg-zinc-100" />
+                <div className="h-6 w-16 rounded-full bg-zinc-100" />
+              </div>
             </div>
-            <Link
-            href="/admin/dashboard/upload-project"
-               className="inline-flex items-center gap-2 rounded-full border border-black px-4 h-10 hover:bg-black hover:text-white transition"
-            >
-              <FiPlus /> New
-            </Link>
-          </div>
-        </header>
+          ))}
+        </div>
+      ) : data.items.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center">
+          <div className="text-2xl">📦</div>
+          <p className="mt-2 font-medium">No projects yet</p>
+          <p className="text-sm text-zinc-500">Click “New Project” to add your first one.</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {data.items.map((p) => (
+              <article key={p.slug} className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white transition hover:shadow-lg">
+                <div className="relative aspect-[16/10] overflow-hidden bg-zinc-100">
+                  {p.coverImage ? (
+                    <img src={p.coverImage} alt={p.coverAlt || p.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-zinc-400">No cover</div>
+                  )}
+                  {p.mediaUrl && (
+                    <video
+                      className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover group-hover:block"
+                      src={p.mediaUrl}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
+                  )}
+                </div>
 
-        {loading ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-neutral-600">No projects found.</div>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((p) => (
-              <article key={p._id} className="rounded-2xl overflow-hidden border border-black/10 bg-white group shadow-[0_6px_18px_rgba(0,0,0,0.05)]">
-                <figure className="relative aspect-[4/3] overflow-hidden">
-                  <img src={p.cover} alt={p.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
-                </figure>
                 <div className="p-4">
-                  <div className="text-xs uppercase tracking-wide text-neutral-600">{p.type}</div>
-                  <h3 className="mt-1 text-lg font-semibold">{p.title}</h3>
-                  <p className="mt-1 text-neutral-700 line-clamp-2">{p.description}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {(p.tags || []).slice(0, 5).map((t) => (
-                      <span key={t} className="rounded-full bg-[#F4F1EC] border border-black/10 px-2 py-1 text-[12px]">{t}</span>
-                    ))}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="line-clamp-1 text-base font-semibold">{p.title}</h3>
+                      <div className="mt-0.5 text-xs text-zinc-500">{p.client || "—"} {p.year ? `• ${p.year}` : ""}</div>
+                    </div>
+                    <Badge>{p.featured ? "Featured" : "Project"}</Badge>
                   </div>
-                  <div className="mt-4 flex items-center justify-end gap-2">
-                    <button onClick={() => onEdit(p)} className="inline-flex items-center gap-1.5 rounded-full border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5">
-                      <FiEdit2 /> Edit
-                    </button>
-                    <button onClick={() => onDelete(p)} className="inline-flex items-center gap-1.5 rounded-full border border-black px-3 py-1.5 text-sm hover:bg-black hover:text-white">
-                      <FiTrash2 /> Delete
-                    </button>
+                  {!!(p.tags?.length) && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {p.tags.slice(0, 4).map((t) => (
+                        <span key={t} className="rounded bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-600 ring-1 ring-inset ring-zinc-200">{t}</span>
+                      ))}
+                      {p.tags.length > 4 && <span className="text-[11px] text-zinc-400">+{p.tags.length - 4}</span>}
+                    </div>
+                  )}
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Link href={`/admin/dashboard/projects/${encodeURIComponent(p.slug)}`} className="inline-flex items-center gap-1.5 rounded border border-zinc-200 px-2.5 py-1.5 text-xs hover:bg-zinc-50">
+                        <FiEdit2 /> Edit
+                      </Link>
+                      {p.caseStudyUrl && (
+                        <a href={p.caseStudyUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded border border-zinc-200 px-2.5 py-1.5 text-xs hover:bg-zinc-50">
+                          <FiExternalLink /> View Case
+                        </a>
+                      )}
+                    </div>
+                    <ConfirmButton onConfirm={() => handleDelete(p.slug)}>
+                      <FiTrash2 /> {busyId === p.slug ? "Deleting…" : "Delete"}
+                    </ConfirmButton>
                   </div>
                 </div>
               </article>
             ))}
           </div>
-        )}
-      </section>
 
-      <Editor
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        initial={current}
-        onSaved={onSaved}
-      />
-    </main>
+          {/* pagination */}
+          <div className="mt-8 flex items-center justify-between">
+            <div className="text-sm text-zinc-600">
+              Showing <b>{(data.page - 1) * data.limit + 1}</b>–<b>{Math.min(data.page * data.limit, data.total)}</b> of <b>{data.total}</b>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={data.page <= 1}
+                onClick={() => updateSearch({ page: String(data.page - 1) })}
+                className="inline-flex items-center gap-2 rounded border border-zinc-200 px-3 py-2 text-sm disabled:opacity-40"
+              >
+                <FiChevronLeft /> Prev
+              </button>
+              <button
+                disabled={data.page >= data.pages}
+                onClick={() => updateSearch({ page: String(data.page + 1) })}
+                className="inline-flex items-center gap-2 rounded border border-zinc-200 px-3 py-2 text-sm disabled:opacity-40"
+              >
+                Next <FiChevronRight />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import React from "react";
 import { HiArrowRight } from "react-icons/hi2";
  import { ArrowRight, Globe } from "lucide-react"
 import WrapButton from "./ui/wrap-button";
+import Link from "next/link";
 
 export default function ContactCta() {
   return (
@@ -17,26 +18,26 @@ export default function ContactCta() {
         {/* Headline wrapper for overlay effect */}
         <div className="relative mt-6">
           {/* Foreground line */}
-          <h2 className="text-4xl sm:text-5xl md:text-5xl font-semibold leading-tight text-gray-900">
+          <h2 className="text-2xl sm:text-5xl md:text-5xl font-semibold leading-tight text-gray-900">
             Let’s Build Something
           </h2>
 
           {/* Oversized pale word behind/under */}
-           <p className="text-9xl text-zinc-400" >
+           <p className="md:text-9xl text-5xl text-zinc-400" >
             Extraordinary
            </p>
         </div>
 
         {/* CTA */}
-        <div className="">
+        <Link href="/contact-us#project-form" className="">
  
 
 
-           <WrapButton className="mt-10" href="/docs/components/card-carousel" >
+           <WrapButton className="mt-10" href="/contact-us#project-form" >
             <Globe className="animate-spin " />
             Get started
         </WrapButton>
-        </div>
+        </Link>
       </div>
     </section>
   );

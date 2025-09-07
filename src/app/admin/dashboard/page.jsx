@@ -22,9 +22,9 @@ import {
 } from "react-icons/md";
 
 const BRAND = {
-  primary: "#234D7E", // your blue
-  primaryDark: "#1D3F68",
-  primarySoft: "rgba(35,77,126,0.10)",
+  primary: "#FF6A00", // StrucAxis orange
+  primaryDark: "#B34700",
+  primarySoft: "rgba(255,106,0,0.10)",
   ink: "#0F1222",
 };
 
@@ -59,12 +59,11 @@ export default function AdminDashboard() {
         className="pointer-events-none absolute inset-x-0 -top-40 h-80 blur-3xl"
         style={{
           background:
-            "radial-gradient(60% 60% at 50% 30%, rgba(35,77,126,.20), rgba(35,77,126,0) 70%)",
+            "radial-gradient(60% 60% at 50% 30%, rgba(255,106,0,.20), rgba(255,106,0,0) 70%)",
         }}
       />
 
       {/* Topbar */}
-    
 
       <div className="max-w-7xl  mx-auto px-4 sm:px-0">
         {/* Sidebar + content */}
@@ -80,8 +79,9 @@ export default function AdminDashboard() {
                 Manage
               </div>
               <ul className="px-2 pb-2">
+                
                 <SideItem
-                  href="/admin/dashboard"
+                  href="/admin/dashboard/services"
                   icon={<MdOutlineSpaceDashboard />}
                   label="Overview"
                   active
@@ -102,7 +102,7 @@ export default function AdminDashboard() {
                   label="Upload Project"
                 /> */}
                 <SideItem
-                  href="/admin/dashboard/featured-projects"
+                  href="/admin/dashboard/feature-projects"
                   icon={<FiStar />}
                   label="Featured Projects"
                 />
@@ -111,13 +111,18 @@ export default function AdminDashboard() {
                   icon={<FiBriefcase />}
                   label="Jobs"
                 />
+                <SideItem
+                  href="/admin/dashboard/services"
+                  icon={<FiBriefcase />}
+                  label="Services"
+                />
               </ul>
 
               <div className="px-4 py-3 text-xs uppercase tracking-wide text-zinc-500 border-t border-zinc-100">
                 Account
               </div>
               <ul className="px-2 pb-4">
-                 <SideItem href="#" icon={<FiLogOut />} label="Logout" />
+                <SideItem href="#" icon={<FiLogOut />} label="Logout" />
               </ul>
             </nav>
           </aside>
@@ -125,24 +130,21 @@ export default function AdminDashboard() {
           {/* Main content */}
           <main className="mt-6 md:mt-20">
             {/* Welcome panel */}
-            <section className="relative overflow-hidden rounded-3xl border border-zinc-100 bg-gradient-to-br from-white via-[rgba(35,77,126,0.06)] to-white p-6 md:p-8">
+            <section className="relative overflow-hidden rounded-3xl border border-zinc-100 bg-gradient-to-br from-white via-[rgba(255,106,0,0.06)] to-white p-6 md:p-8">
               <div
                 aria-hidden
                 className="absolute -right-10 -top-10 h-40 w-40 rounded-full blur-2xl"
                 style={{
                   background:
-                    "radial-gradient(45% 45% at 50% 50%, rgba(35,77,126,.20), rgba(35,77,126,0))",
+                    "radial-gradient(45% 45% at 50% 50%, rgba(255,106,0,.20), rgba(255,106,0,0))",
                 }}
               />
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                Welcome back, Admin 👋
+                Welcome back, StrucAxis Admin 👋
               </h1>
               <p className="mt-2 text-zinc-600 max-w-2xl">
-                Quick snapshot of your content. Create, edit, and publish with a
-                single click.
+                Contractor-first control center — manage blogs, projects, services and careers with clarity and speed.
               </p>
-
-              
             </section>
 
             {/* Quick actions */}
@@ -151,35 +153,60 @@ export default function AdminDashboard() {
                 href="/admin/dashboard/blogs"
                 icon={<FiFileText />}
                 title="Manage Blogs"
-                desc="Create, edit and publish articles."
+                desc="Publish updates, case studies & insights."
               />
-              <ActionCard
-                href="/admin/dashboard/projects"
-                icon={<FiGrid />}
-                title="Manage Projects"
-                desc="Organize and showcase your work."
-              />
-              {/* <ActionCard
-                href="/admin/dashboard/upload-project"
-                icon={<FiUpload />}
-                title="Upload Project"
-                desc="Add a new project with images & meta."
-                primary
-              /> */}
-              <ActionCard
-                href="/admin/dashboard/featured-projects"
-                icon={<FiStar />}
-                title=" Projects"
-                desc="Promote or curate homepage spotlight."
-                primary
-              />
+
               <ActionCard
                 href="/admin/dashboard/jobs"
                 icon={<FiBriefcase />}
                 title="Manage Jobs"
-                desc="Post, edit, and close roles."
+                desc="Post openings for engineers, site staff & more."
                 primary
               />
+              <ActionCard
+                href="/admin/dashboard/feature-projects"
+                icon={<FiStar />}
+                title="Feature Projects"
+                desc="Showcase priority builds on the website."
+              />
+              <ActionCard
+                href="/admin/dashboard/projects"
+                icon={<FiStar />}
+                title="Projects"
+                desc="Add new projects, images & progress."
+              />
+              <ActionCard
+                href="/admin/dashboard/services"
+                icon={<FiStar />}
+                title="Services"
+                desc="Manage service pages & ordering."
+              />
+              <ActionCard
+                href="/admin/dashboard/team"
+                icon={<FiStar />}
+               title="Team"
+                desc="Update team structure & bios."
+              />
+              <ActionCard
+                href="/admin/dashboard/capabilities"
+                icon={<FiStar />}
+               title="Capabilities"
+                desc="Highlight fast-track, mall coordination & more."
+              />
+              <ActionCard
+                href="/admin/dashboard/testimonials"
+                icon={<FiStar />}
+               title="Testimonials"
+                desc="Add client quotes & approvals."
+              />
+              <ActionCard
+                href="/admin/dashboard/client-logos"
+                icon={<FiStar />}
+               title="Client Logs"
+                desc="Manage brand logos for case studies."
+              />
+               
+
             </section>
 
             {/* Tables */}
@@ -216,7 +243,7 @@ function SideItem({ href, icon, label, active }) {
         href={href}
         className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
           active
-            ? "bg-[rgba(35,77,126,0.08)] text-[color:#234D7E]"
+            ? "bg-[rgba(255,106,0,0.08)] text-[color:#FF6A00]"
             : "text-zinc-700 hover:bg-zinc-50"
         }`}
       >
@@ -230,7 +257,9 @@ function SideItem({ href, icon, label, active }) {
 function StatCard({ label, value, delta }) {
   return (
     <div className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-[0_10px_30px_rgba(17,17,26,0.04)]">
-      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-zinc-500">
+        {label}
+      </div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-zinc-500">{delta}</div>
     </div>
@@ -241,8 +270,8 @@ function ActionCard({ href, icon, title, desc, primary }) {
   return (
     <Link
       href={href}
-      className={`group block rounded-2xl border border-zinc-100 bg-white p-5 shadow-[0_10px_30px_rgba(17,17,26,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(35,77,126,0.12)] ${
-        primary ? "ring-1 ring-[rgba(35,77,126,0.18)]" : ""
+      className={`group block rounded-2xl border border-zinc-100 bg-white p-5 shadow-[0_10px_30px_rgba(17,17,26,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(255,106,0,0.12)] ${
+        primary ? "ring-1 ring-[rgba(255,106,0,0.20)]" : ""
       }`}
     >
       <div className="flex items-center gap-3">
@@ -257,7 +286,7 @@ function ActionCard({ href, icon, title, desc, primary }) {
           <p className="text-sm text-zinc-600">{desc}</p>
         </div>
       </div>
-      <div className="mt-4 flex items-center text-sm font-medium text-[color:#234D7E]">
+      <div className="mt-4 flex items-center text-sm font-medium text-[color:#FF6A00]">
         Go
         <FiChevronRight className="ml-1 transition-transform group-hover:translate-x-0.5" />
       </div>
@@ -283,7 +312,10 @@ function Table({ cols, rows }) {
         <thead className="bg-zinc-50/60">
           <tr>
             {cols.map((c) => (
-              <th key={c} className="px-3 py-2 text-left font-medium text-zinc-600">
+              <th
+                key={c}
+                className="px-3 py-2 text-left font-medium text-zinc-600"
+              >
                 {c}
               </th>
             ))}
@@ -310,7 +342,7 @@ function FooterLink({ href, label }) {
     <div className="mt-3 flex justify-end">
       <Link
         href={href}
-        className="text-sm font-medium text-[color:#234D7E] hover:underline"
+        className="text-sm font-medium text-[color:#FF6A00] hover:underline"
       >
         {label}
       </Link>

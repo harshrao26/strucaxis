@@ -1,237 +1,499 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FiAlertCircle } from "react-icons/fi";
+import {
+  FiAlertCircle, FiCheckCircle, FiHash, FiLink, FiTag, FiTrash2, FiPlus,
+  FiType, FiUser, FiCalendar, FiChevronUp, FiChevronDown, FiFilm,
+  FiImage, FiPlayCircle, FiGlobe, FiCode, FiInfo
+} from "react-icons/fi";
 import CloudinaryUploader from "./CloudinaryUploader";
-import { Row, Field } from "./UI";
 
-export default function ProjectForm({ mode = "create", initial = {}, onSubmit }) {
+export default function ProjectForm({ mode = "create", initial = undefined, onSubmit }) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [okMsg, setOkMsg] = useState(null);
-  const [schemaValid, setSchemaValid] = useState(true);
 
-  const [f, setF] = useState({
-    title: initial.title || "",
-    slug: initial.slug || "",
-    client: initial.client || "",
-    year: initial.year || "",
-    tags: Array.isArray(initial.tags) ? initial.tags.join(", ") : "",
-    description: initial.description || "",
-    coverImage: initial.coverImage || "",
-    coverAlt: initial.coverAlt || "",
-    mediaUrl: initial.mediaUrl || "",
-    galleryImages: Array.isArray(initial.gallery)
-      ? initial.gallery.map(g => g.src)
-      : (initial.galleryImages || []),
-    galleryAlts: Array.isArray(initial.gallery)
-      ? initial.gallery.map(g => g.alt || "")
-      : [],
-    caseStudyUrl: initial.caseStudyUrl || "",
-    featured: typeof initial.featured === "boolean" ? initial.featured : true,
-    stats: (initial.stats || [])
-      .map(s => `${s.value || ""} - ${s.label || ""}`.trim())
-      .filter(Boolean)
-      .join("\n"),
-    schemaMarkup: initial.schemaMarkup || "",
-  });
+  // ---- safe initial ----
+  const safeInitial = (initial && typeof initial === "object") ? initial : {};
+
+  // ---- helpers ----
+  const slugify = (s) =>
+    (s || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/--+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  // ---- local state ----
+  const [f, setF] = useState(() => ({
+    title: safeInitial.title || "",
+    slug: safeInitial.slug || "",
+    client: safeInitial.client || "",
+    year: safeInitial.year || "",
+    description: safeInitial.description || "",
+    coverImage: safeInitial.coverImage || "",
+    coverAlt: safeInitial.coverAlt || "",
+    mediaUrl: safeInitial.mediaUrl || "",
+    caseStudyUrl: safeInitial.caseStudyUrl || "",
+    featured: typeof safeInitial.featured === "boolean" ? safeInitial.featured : true,
+    tags: Array.isArray(safeInitial.tags) ? safeInitial.tags : [],
+    gallery: Array.isArray(safeInitial.gallery) && safeInitial.gallery.length > 0
+      ? safeInitial.gallery
+      : (Array.isArray(safeInitial.galleryImages) ? safeInitial.galleryImages.map((src) => ({ src, alt: "" })) : []),
+    stats: Array.isArray(safeInitial.stats) ? safeInitial.stats : [],
+    schemaMarkup: safeInitial.schemaMarkup || "",
+  }));
+
+  // rehydrate when initial updates
+  useEffect(() => {
+    const si = (initial && typeof initial === "object") ? initial : null;
+    if (!si) return;
+    setF((prev) => ({
+      ...prev,
+      title: si.title ?? prev.title ?? "",
+      slug: si.slug ?? prev.slug ?? "",
+      client: si.client ?? prev.client ?? "",
+      year: si.year ?? prev.year ?? "",
+      description: si.description ?? prev.description ?? "",
+      coverImage: si.coverImage ?? prev.coverImage ?? "",
+      coverAlt: si.coverAlt ?? prev.coverAlt ?? "",
+      mediaUrl: si.mediaUrl ?? prev.mediaUrl ?? "",
+      caseStudyUrl: si.caseStudyUrl ?? prev.caseStudyUrl ?? "",
+      featured: typeof si.featured === "boolean" ? si.featured : (typeof prev.featured === "boolean" ? prev.featured : true),
+      tags: Array.isArray(si.tags) ? si.tags : (Array.isArray(prev.tags) ? prev.tags : []),
+      gallery: Array.isArray(si.gallery) && si.gallery.length > 0
+        ? si.gallery
+        : (Array.isArray(si.galleryImages) ? si.galleryImages.map((src) => ({ src, alt: "" })) : (prev.gallery || [])),
+      stats: Array.isArray(si.stats) ? si.stats : (prev.stats || []),
+      schemaMarkup: typeof si.schemaMarkup === "string" ? si.schemaMarkup : (prev.schemaMarkup || ""),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   const onChange = (k, v) => setF((s) => ({ ...s, [k]: v }));
+
+  const [submitting, setSubmitting] = useState(false);
+  const [schemaValid, setSchemaValid] = useState(true);
+  const [schemaObj, setSchemaObj] = useState(null);
+  const [error, setError] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+
+  // autoslug on title (create nicety)
+  useEffect(() => {
+    if (mode === "create" && !f.slug && f.title) onChange("slug", slugify(f.title));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.title]);
+
+  // JSON-LD check (soft)
+  useEffect(() => {
+    const raw = (f.schemaMarkup || "").trim();
+    if (!raw) { setSchemaValid(true); setSchemaObj(null); return; }
+    try { const parsed = JSON.parse(raw); setSchemaValid(true); setSchemaObj(parsed); }
+    catch { setSchemaValid(false); setSchemaObj(null); }
+  }, [f.schemaMarkup]);
+
   const validate = () => {
-    if (!f.title.trim() || !f.slug.trim()) return "Title and Slug are required";
-    if (f.slug.includes(" ")) return "Slug cannot contain spaces";
+    if (!f.title.trim()) return "Title is required.";
+    if (!f.slug.trim()) return "Slug is required.";
+    if (/\s/.test(f.slug)) return "Slug cannot contain spaces.";
     return null;
   };
 
+  // ---- tags ----
+  const [tagInput, setTagInput] = useState("");
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (!t) return;
+    if (!f.tags.includes(t)) onChange("tags", [...f.tags, t]);
+    setTagInput("");
+  };
+  const removeTag = (t) => onChange("tags", f.tags.filter((x) => x !== t));
+
+  // ---- stats ----
+  const addStat = () => onChange("stats", [...f.stats, { value: "", label: "" }]);
+  const updateStat = (i, kv) => {
+    const next = [...f.stats]; next[i] = { ...next[i], ...kv }; onChange("stats", next);
+  };
+  const removeStat = (i) => { const next = [...f.stats]; next.splice(i, 1); onChange("stats", next); };
+
+  // ---- gallery ----
+  const addGalleryImages = (urls) => {
+    const items = Array.isArray(urls) ? urls.map((src) => ({ src, alt: "" })) : [{ src: urls, alt: "" }];
+    onChange("gallery", [...f.gallery, ...items]);
+  };
+  const setCoverFromGallery = (src, alt = "") => {
+    onChange("coverImage", src);
+    if (!f.coverAlt) onChange("coverAlt", alt);
+  };
+  const updateGalleryAlt = (i, alt) => {
+    const next = [...f.gallery]; next[i] = { ...next[i], alt }; onChange("gallery", next);
+  };
+  const removeGalleryAt = (i) => {
+    const next = [...f.gallery]; next.splice(i, 1); onChange("gallery", next);
+  };
+  const moveGallery = (i, dir) => {
+    const j = i + dir; if (j < 0 || j >= f.gallery.length) return;
+    const next = [...f.gallery]; [next[i], next[j]] = [next[j], next[i]]; onChange("gallery", next);
+  };
+  const galleryValue = useMemo(() => f.gallery.map((g) => g.src), [f.gallery]);
+
+  // ---- submit ----
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null); setOkMsg(null);
 
-    const v = validate();
-    if (v) { setError(v); return; }
-
-    // build gallery objects with alt
-    const gallery = (f.galleryImages || []).map((src, i) => ({
-      src,
-      alt: (f.galleryAlts?.[i] || "").trim(),
-    }));
-
-    // soft-validate schema JSON (store raw string regardless)
-    if (f.schemaMarkup?.trim()) {
-      try { JSON.parse(f.schemaMarkup); setSchemaValid(true); }
-      catch { setSchemaValid(false); /* allow submit anyway */ }
-    } else {
-      setSchemaValid(true);
-    }
+    const v = validate(); if (v) { setError(v); return; }
 
     setSubmitting(true);
     try {
       const payload = {
         title: f.title.trim(),
-        slug: f.slug.trim().toLowerCase(),
+        slug: slugify(f.slug.trim()),
         client: f.client.trim(),
         year: f.year ? Number(f.year) : undefined,
-        tags: f.tags.split(",").map((s) => s.trim()).filter(Boolean),
-
-        // Media
+        description: f.description.trim(),
+        tags: f.tags,
         coverImage: f.coverImage.trim(),
         coverAlt: f.coverAlt.trim(),
         mediaUrl: f.mediaUrl.trim(),
-
-        // structured + legacy
-        gallery,
-        galleryImages: Array.isArray(f.galleryImages) ? f.galleryImages : [],
-
-        // Links
+        gallery: f.gallery.filter((x) => x?.src).map((x) => ({ src: x.src, alt: (x.alt || "").trim() })),
+        galleryImages: f.gallery.filter((x) => x?.src).map((x) => x.src),
         caseStudyUrl: f.caseStudyUrl.trim(),
-
-        // Presentation
         featured: !!f.featured,
-
-        // Stats
-        stats: f.stats
-          ? f.stats.split("\n").map((line) => {
-              const [value, ...rest] = line.split(" - ");
-              return { value: (value || "").trim(), label: (rest.join(" - ") || "").trim() };
-            }).filter((s) => s.value || s.label)
-          : [],
-
-        // SEO
+        stats: (f.stats || []).filter((s) => s.value || s.label).map((s) => ({
+          value: (s.value || "").trim(), label: (s.label || "").trim(),
+        })),
         schemaMarkup: f.schemaMarkup,
       };
 
       await onSubmit(payload);
-      setOkMsg(mode === "create" ? "Project created!" : "Project updated!");
-      setTimeout(() => router.push("/admin/feature-projects"), 650);
-    } catch (e) {
-      setError(e.message || "Error");
+      setOkMsg(mode === "create" ? "Project created 🎉" : "Project updated ✅");
+      setTimeout(() => router.push("/admin/dashboard"), 650);
+    } catch (e2) {
+      setError(e2?.message || "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const titleCount = f.title.length;
+  const descCount = f.description.length;
+
   return (
-    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {okMsg && <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{okMsg}</p>}
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* toast banners */}
+      {error && (
+        <Banner tone="error" icon={<FiAlertCircle />}>{error}</Banner>
+      )}
+      {okMsg && (
+        <Banner tone="success" icon={<FiCheckCircle />}>{okMsg}</Banner>
+      )}
 
-      <Row>
-        <Field label="Title *"><input className="input border-2 rounded w-full p-2" value={f.title} onChange={(e)=>onChange("title", e.target.value)} /></Field>
-        <Field label="Slug *"><input className="input border-2 rounded w-full p-2" value={f.slug} onChange={(e)=>onChange("slug", e.target.value)} placeholder="kilo-app-redesign" /></Field>
-        <Field label="Client"><input className="input border-2 rounded w-full p-2" value={f.client} onChange={(e)=>onChange("client", e.target.value)} /></Field>
-      </Row>
+      {/* BASICS */}
+      <Section title="Project Basics" icon={<FiType />}>
+        <Grid cols={3}>
+          <Field label="Title *" icon={<FiType />} hint={`${titleCount}/140`}>
+            <input
+              className="input w-full"
+              value={f.title}
+              maxLength={140}
+              onChange={(e) => onChange("title", e.target.value)}
+              placeholder="Crackpot Café & Bistro"
+            />
+          </Field>
 
-      <Row>
-        <Field label="Year"><input className="input border-2 rounded w-full p-2" value={f.year} onChange={(e)=>onChange("year", e.target.value)} placeholder="2025" /></Field>
-        <Field label="Tags (comma separated)"><input className="input border-2 rounded w-full p-2" value={f.tags} onChange={(e)=>onChange("tags", e.target.value)} placeholder="Brand, Web, SaaS" /></Field>
-        <Field label="Featured">
-          <select className="input border-2 rounded w-full p-2" value={String(f.featured)} onChange={(e)=>onChange("featured", e.target.value === "true")}>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </select>
-        </Field>
-      </Row>
+          <Field
+            label="Slug *"
+            icon={<FiHash />}
+            hint={<span className="inline-flex items-center gap-1 text-zinc-500"><FiGlobe /> /projects/<b className="text-zinc-700">{f.slug || "slug"}</b></span>}
+          >
+            <div className="flex items-stretch gap-2">
+              <input
+                className="input w-full"
+                value={f.slug}
+                onChange={(e) => onChange("slug", slugify(e.target.value))}
+                placeholder="crackpot-cafe-bistro"
+              />
+              <button type="button" onClick={() => onChange("slug", slugify(f.title || f.slug))} className="btn-subtle">Auto</button>
+            </div>
+          </Field>
 
-      <Field label="Description (long)">
-        <textarea className="input min-h-[160px] border-2 rounded w-full p-2" value={f.description} onChange={(e)=>onChange("description", e.target.value)} />
-      </Field>
+          <Field label="Client" icon={<FiUser />}>
+            <input
+              className="input w-full"
+              value={f.client}
+              onChange={(e) => onChange("client", e.target.value)}
+              placeholder="Crackpot Hospitality"
+            />
+          </Field>
+        </Grid>
 
-      <Row>
-        <Field label="Cover Image">
-          <CloudinaryUploader
-            label="Upload cover image"
-            multiple={false}
-            value={f.coverImage}
-            onChange={(url) => onChange("coverImage", url)}
+        <Grid cols={3}>
+          <Field label="Year" icon={<FiCalendar />}>
+            <input
+              className="input w-full"
+              value={f.year}
+              onChange={(e) => onChange("year", e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="2025"
+              inputMode="numeric"
+            />
+          </Field>
+
+          <Field label="Featured">
+            <select className="input w-full" value={String(f.featured)} onChange={(e) => onChange("featured", e.target.value === "true")}>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </Field>
+
+          <Field label="Case Study URL" icon={<FiLink />}>
+            <input
+              className="input w-full"
+              value={f.caseStudyUrl}
+              onChange={(e) => onChange("caseStudyUrl", e.target.value)}
+              placeholder="https://example.com/case-study"
+            />
+          </Field>
+        </Grid>
+
+        <Field label="Description" hint={`${descCount} chars`}>
+          <textarea
+            className="input min-h-[160px] w-full"
+            value={f.description}
+            onChange={(e) => onChange("description", e.target.value)}
+            placeholder="Long-form description…"
           />
         </Field>
-        <Field label="Cover Alt Text (SEO)">
-          <input className="input border-2 rounded w-full p-2" value={f.coverAlt} onChange={(e)=>onChange("coverAlt", e.target.value)} placeholder="e.g., Contemporary café interior with warm lighting" />
-        </Field>
-        <Field label="Hover Preview Video (mp4/webm, optional)">
-          <input className="input border-2 rounded w-full p-2" value={f.mediaUrl} onChange={(e)=>onChange("mediaUrl", e.target.value)} />
-        </Field>
-      </Row>
+      </Section>
 
-      <Field label="Gallery Images">
-        <CloudinaryUploader
-          label="Upload gallery images"
-          multiple
-          value={f.galleryImages}
-          onChange={(arr) => {
-            const nextAlts = [...(f.galleryAlts || [])];
-            if (arr.length > nextAlts.length) nextAlts.push(...Array(arr.length - nextAlts.length).fill(""));
-            else if (arr.length < nextAlts.length) nextAlts.length = arr.length;
-            onChange("galleryImages", arr);
-            onChange("galleryAlts", nextAlts);
-          }}
-        />
-      </Field>
+      {/* TAGS */}
+      <Section title="Tags" icon={<FiTag />} subtitle="Improve discovery & filtering">
+        <div className="flex flex-wrap items-center gap-2">
+          {f.tags.map((t) => (
+            <span key={t} className="chip">
+              {t}
+              <button type="button" onClick={() => removeTag(t)} className="chip-x"><FiTrash2 /></button>
+            </span>
+          ))}
+          <div className="flex items-stretch gap-2">
+            <input
+              className="input"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+              placeholder="Add a tag (e.g., Web)"
+            />
+            <button type="button" onClick={addTag} className="btn-subtle"><FiPlus /> Add</button>
+          </div>
+        </div>
+      </Section>
 
-      {Array.isArray(f.galleryImages) && f.galleryImages.length > 0 && (
-        <div className="grid gap-3 md:grid-cols-2">
-          {f.galleryImages.map((src, i) => (
-            <div key={src + i} className="rounded-lg border p-3 bg-white">
-              <div className="flex items-start gap-3">
-                <img src={src} alt="" className="h-20 w-28 object-cover rounded border" />
-                <div className="flex-1">
-                  <div className="text-xs mb-1 text-neutral-600">Alt text for image #{i + 1}</div>
-                  <input
-                    className="input border rounded w-full p-2"
-                    value={f.galleryAlts?.[i] || ""}
-                    onChange={(e) => {
-                      const next = [...(f.galleryAlts || [])];
-                      next[i] = e.target.value;
-                      onChange("galleryAlts", next);
-                    }}
-                    placeholder="Describe image content (for SEO & accessibility)"
-                  />
-                </div>
+      {/* MEDIA */}
+      <Section title="Media" icon={<FiImage />} subtitle="Cover, preview video & gallery">
+        <Grid cols={3}>
+          <Field label="Cover Image" icon={<FiImage />} hint="Used on cards & hero">
+            <CloudinaryUploader
+              label="Upload cover image"
+              multiple={false}
+              value={f.coverImage}
+              onChange={(url) => onChange("coverImage", url)}
+            />
+            {f.coverImage && (
+              <div className="mt-3 overflow-hidden rounded-lg border bg-gradient-to-b from-zinc-50 to-white">
+                <img src={f.coverImage} alt="" className="aspect-[16/9] w-full object-cover" />
               </div>
+            )}
+          </Field>
+
+          <Field label="Cover Alt Text (SEO)">
+            <input
+              className="input w-full"
+              value={f.coverAlt}
+              onChange={(e) => onChange("coverAlt", e.target.value)}
+              placeholder="e.g., Contemporary café interior with warm lighting"
+            />
+          </Field>
+
+          <Field label="Hover Preview Video (mp4/webm)" icon={<FiPlayCircle />}>
+            <input
+              className="input w-full"
+              value={f.mediaUrl}
+              onChange={(e) => onChange("mediaUrl", e.target.value)}
+              placeholder="https://res.cloudinary.com/.../preview.webm"
+            />
+          </Field>
+        </Grid>
+
+        <Field label="Gallery Images" icon={<FiFilm />} hint="Upload multiple images; set ALT text & reorder.">
+          <CloudinaryUploader
+            label="Upload gallery images"
+            multiple
+            value={galleryValue}
+            onChange={(arrOrStr) => {
+              const arr = Array.isArray(arrOrStr) ? arrOrStr : [arrOrStr];
+              addGalleryImages(arr);
+            }}
+          />
+
+          {f.gallery.length > 0 ? (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {f.gallery.map((g, i) => (
+                <div key={g.src + i} className="card">
+                  <div className="flex items-start gap-3">
+                    <div className="relative shrink-0">
+                      <img src={g.src} alt="" className="h-24 w-32 rounded-md border object-cover" />
+                      <button
+                        type="button"
+                        title="Set as cover"
+                        onClick={() => setCoverFromGallery(g.src, g.alt)}
+                        className="absolute bottom-1 left-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] ring-1 ring-zinc-200 hover:bg-white"
+                      >
+                        Set cover
+                      </button>
+                    </div>
+                    <div className="flex-1">
+                      <div className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                        <FiInfo /> Alt text
+                      </div>
+                      <input
+                        className="input w-full"
+                        value={g.alt || ""}
+                        onChange={(e) => updateGalleryAlt(i, e.target.value)}
+                        placeholder="Describe image content (SEO & a11y)"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => moveGallery(i, -1)} className="btn-icon" title="Move up"><FiChevronUp /></button>
+                          <button type="button" onClick={() => moveGallery(i, 1)} className="btn-icon" title="Move down"><FiChevronDown /></button>
+                        </div>
+                        <button type="button" onClick={() => removeGalleryAt(i)} className="btn-danger text-xs"><FiTrash2 /> Remove</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-dashed p-6 text-center text-sm text-zinc-500">
+              No gallery images yet. Upload a few to showcase the project ✨
+            </div>
+          )}
+        </Field>
+      </Section>
+
+      {/* STATS */}
+      <Section title="Impact Stats" subtitle="Quantify outcomes & results">
+        {f.stats.length === 0 && (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-zinc-500">No stats yet.</div>
+        )}
+        <div className="space-y-3">
+          {f.stats.map((s, i) => (
+            <div key={i} className="grid gap-2 md:grid-cols-[1fr,2fr,auto]">
+              <input className="input" value={s.value} onChange={(e) => updateStat(i, { value: e.target.value })} placeholder="+120%" />
+              <input className="input" value={s.label} onChange={(e) => updateStat(i, { label: e.target.value })} placeholder="Conversion lift" />
+              <button type="button" onClick={() => removeStat(i)} className="btn-danger"><FiTrash2 /> Remove</button>
             </div>
           ))}
         </div>
-      )}
+        <button type="button" onClick={addStat} className="btn-subtle mt-3"><FiPlus /> Add stat</button>
+      </Section>
 
-      <Row>
-        <Field label="Case Study URL"><input className="input border-2 rounded w-full p-2" value={f.caseStudyUrl} onChange={(e)=>onChange("caseStudyUrl", e.target.value)} /></Field>
-        <Field label="Stats (one per line, format: VALUE - LABEL)">
-          <textarea className="input min-h-[90px] border-2 rounded w-full p-2" placeholder="+120% - Conversion lift"
-                    value={f.stats} onChange={(e)=>onChange("stats", e.target.value)} />
-        </Field>
-        <div />
-      </Row>
+      {/* SEO */}
+      <Section title="SEO (JSON-LD)" icon={<FiCode />} subtitle="Paste raw JSON-LD. We’ll store it as-is.">
+        <Grid cols={2}>
+          <Field label="Schema Markup (JSON-LD raw)">
+            <textarea
+              className="input min-h-[180px] w-full font-mono text-[12px]"
+              value={f.schemaMarkup}
+              onChange={(e) => onChange("schemaMarkup", e.target.value)}
+              placeholder='{"@context":"https://schema.org","@type":"CreativeWork","name":"Crackpot Café & Bistro"}'
+            />
+            {!schemaValid && f.schemaMarkup.trim() && (
+              <div className="mt-1 flex items-center gap-1 text-xs text-amber-700"><FiAlertCircle /> This doesn’t look like valid JSON. You can still save it.</div>
+            )}
+          </Field>
 
-      <Field label="Schema Markup (JSON-LD)">
-        <textarea
-          className="input min-h-[140px] border-2 rounded w-full p-2 font-mono text-sm"
-          placeholder='{"@context":"https://schema.org","@type":"CreativeWork","name":"Crackpot Café & Bistro"}'
-          value={f.schemaMarkup}
-          onChange={(e) => {
-            const val = e.target.value;
-            onChange("schemaMarkup", val);
-            if (val.trim()) {
-              try { JSON.parse(val); setSchemaValid(true); } catch { setSchemaValid(false); }
-            } else {
-              setSchemaValid(true);
-            }
-          }}
-        />
-        {!schemaValid && f.schemaMarkup.trim() && (
-          <div className="mt-1 text-xs text-amber-700 flex items-center gap-1">
-            <FiAlertCircle /> This doesn’t look like valid JSON. You can still save it.
+          <Field label="Quick Preview" hint="Rendered from parsed JSON (read-only)">
+            <div className="rounded-lg border bg-zinc-50 p-3 text-xs">
+              {schemaObj ? (
+                <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(schemaObj, null, 2)}</pre>
+              ) : (
+                <div className="text-zinc-500">No valid JSON detected.</div>
+              )}
+            </div>
+          </Field>
+        </Grid>
+      </Section>
+
+      {/* sticky action bar */}
+      <div className="sticky bottom-3 z-10 mt-4">
+        <div className="flex items-center gap-3 rounded-xl border bg-white/90 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:backdrop-blur">
+          <button disabled={submitting} className="btn-primary">
+            {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save Changes")}
+          </button>
+          <button type="button" onClick={() => history.back()} className="btn-plain">Cancel</button>
+          <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+            <FiGlobe /> Slug will be used for fetching this project.
           </div>
-        )}
-      </Field>
-
-      <div className="flex items-center gap-3">
-        <button disabled={submitting} className="rounded bg-zinc-900 text-white px-4 py-2 text-sm disabled:opacity-50">
-          {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create Project" : "Save Changes")}
-        </button>
-        <button type="button" onClick={()=>history.back()} className="rounded border px-4 py-2 text-sm">Cancel</button>
+        </div>
       </div>
     </form>
   );
 }
+
+/* ======= local UI bits ======= */
+function Banner({ tone = "info", icon, children }) {
+  const tones = {
+    info:    "border-sky-200 bg-sky-50 text-sky-800",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    error:   "border-red-200 bg-red-50 text-red-800",
+  }[tone] || "border-zinc-200 bg-zinc-50 text-zinc-800";
+  return (
+    <div className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${tones}`}>
+      <span className="mt-0.5">{icon}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function Section({ title, icon, subtitle, children }) {
+  return (
+    <section className="section-card">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 shadow-inner">
+            {icon || <FiType />}
+          </div>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+            {subtitle ? <p className="text-xs text-zinc-500">{subtitle}</p> : null}
+          </div>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid({ cols = 3, children }) {
+  const cls = cols === 2 ? "md:grid-cols-2" : cols === 1 ? "md:grid-cols-1" : "md:grid-cols-3";
+  return <div className={`grid gap-3 ${cls}`}>{children}</div>;
+}
+
+function Field({ label, hint, icon, children }) {
+  return (
+    <label className="block">
+      <div className="mb-1 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-zinc-800">
+          {icon ? <span className="text-zinc-500">{icon}</span> : null}
+          <span>{label}</span>
+        </div>
+        {hint && <div className="text-xs text-zinc-500">{hint}</div>}
+      </div>
+      {children}
+    </label>
+  );
+}
+
+ 

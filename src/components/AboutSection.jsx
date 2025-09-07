@@ -9,7 +9,7 @@ export default function AboutSection() {
       <div className="mx-auto max-w-7xl px-5 sm:px-8 grid md:grid-cols-2 gap-12 items-center">
         {/* Left Column */}
         <div>
-          <h2 className="text-4xl sm:text-5xl font-bold leading-tight text-gray-900">
+          <h2 className="text-4xl sm:text-5xl font-  leading-tight text-gray-900">
             We build spaces where{" "}
             <span className="text-gray-500">precision meets performance</span>,{" "}
             creating environments{" "}
@@ -17,7 +17,7 @@ export default function AboutSection() {
           </h2>
 
           <p className="mt-6 text-gray-700 text-lg">
-            At <span className="font-semibold">StrucAxis</span>, we believe
+            At <span className="font- ">StrucAxis</span>, we believe
             contracting is about more than just execution—it's about delivering
             trust. Our mission is to create spaces that are delivered on time,
             within budget, and with uncompromising quality.

@@ -11,51 +11,82 @@ import { useRouter } from "next/navigation";
 
 import contactImg from '@/assets/contact.webp'
 import { WobbleCardDemo } from "@/components/WobbleCardDemo";
+import ContactForm from "@/components/ContactForm";
 export default function ContactPage() {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState({ state: "idle", message: "" });
   const router = useRouter();
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    setSubmitting(true);
+  e.preventDefault();
+  const form = e.currentTarget;
+  setSubmitting(true);
+  setStatus(null);
 
-    try {
-      const formData = new FormData(form);
-      const data = Object.fromEntries(formData);
+  try {
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
 
-      const res = await fetch("/api/submitContact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+    // Build payload (normalize fields + extras)
+    const payload = {
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone || data.whatsapp,
+      company: data.company || "",
+      location: data.location || data.cityCountry || "",
+      projectType: data.projectType,
+      budget: data.budget || "",
+      timeline: data.timeline || "",
+      message: data.message || data.brief || "",
 
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || "Failed to submit");
-      }
+      // meta info
+      page: window.location.pathname,
+      utm: {
+        source: new URLSearchParams(window.location.search).get("utm_source") || "",
+        medium: new URLSearchParams(window.location.search).get("utm_medium") || "",
+        campaign: new URLSearchParams(window.location.search).get("utm_campaign") || "",
+      },
+      website: "", // honeypot field (should stay empty)
+    };
 
-      setSubmitting(false);
-      form?.reset();
-      setStatus({ state: "success", message: "Thanks! Your enquiry has been saved." });
-      // Navigate to thank-you. Use SPA replace, then hard fallback just in case.
-      try {
-        router.replace("/thankyou");
-        // Fallback in case client-side nav is interrupted by form context or transitions
-        setTimeout(() => {
-          if (typeof window !== "undefined" && window.location.pathname !== "/thankyou") {
-            window.location.assign("/thankyou");
-          }
-        }, 50);
-      } catch (_) {
-        if (typeof window !== "undefined") window.location.assign("/thankyou");
-      }
-    } catch (err) {
-      console.error(err);
-      setSubmitting(false);
+    const res = await fetch("/api/contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await res.json();
+    if (!res.ok || !result.ok) {
+      throw new Error(result.error || "Failed to submit");
     }
+
+    setSubmitting(false);
+    form?.reset();
+    setStatus({
+      state: "success",
+      message: "✅ Thanks! Your enquiry has been saved.",
+    });
+
+    // Redirect to thank-you
+    try {
+      router.replace("/thankyou");
+      setTimeout(() => {
+        if (window.location.pathname !== "/thankyou") {
+          window.location.assign("/thankyou");
+        }
+      }, 100);
+    } catch (_) {
+      window.location.assign("/thankyou");
+    }
+  } catch (err) {
+    console.error("Submit error:", err);
+    setSubmitting(false);
+    setStatus({
+      state: "error",
+      message: "❌ Something went wrong. Please try again.",
+    });
   }
+}
   return (
     <main className="   bg-[#F4F1EC]  pt-20 pb-6 md:pt-40 text-[#101010]">
        
@@ -99,7 +130,7 @@ export default function ContactPage() {
     </section>
 
 
-    <WobbleCardDemo />
+    {/* <WobbleCardDemo /> */}
 
       {/* ===== Contact + Form ===== */}
       <section className="relative mt-20 ">
@@ -203,106 +234,9 @@ export default function ContactPage() {
             </aside>
 
             {/* Form */}
-            <div id="project-form" className="rounded-2xl border border-black/10 bg-white p-6 md:p-8">
-              <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5">
-                <input type="text" name="_honey" tabIndex="-1" autoComplete="off" className="hidden" aria-hidden="true" />
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <Field label="Full name" name="name" required />
-                  <Field label="Email" name="email" type="email" required />
-                </div>
+            <div id="project-form">
 
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <Field label="Phone / WhatsApp" name="phone" />
-                  <Field label="Company / Brand (optional)" name="company" />
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <Select
-                    label="Project type"
-                    name="projectType"
-                    options={[
-                      "Residential",
-                      "Commercial / Office",
-                      "Retail / F&B",
-                      "Hospitality",
-                      "Landscape",
-                      "Interior Renovation",
-                      "Concept / Feasibility",
-                      "Others"
-                    ]}
-                    required
-                  />
-                  <Field label="City & Country" name="location" placeholder="e.g., Mumbai, India / Dubai, UAE" required />
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <Select
-                    label="Estimated budget"
-                    name="budget"
-                    options={[
-                      "To be discussed",
-                      "$25k – $50k",
-                      "$50k – $100k",
-                      "$100k – $250k",
-                      "$250k+",
-                    ]}
-                  />
-                  <Select
-                    label="Timeline"
-                    name="timeline"
-                    options={[
-                      "Immediate (0–1 month)",
-                      "Soon (1–3 months)",
-                      "Planning (3–6 months)",
-                      "Exploring options",
-                    ]}
-                  />
-                </div>
-
-                <Textarea
-                  label="Tell us about your project"
-                  name="message"
-                  placeholder="Site details, area (sqft/sqm), style inspirations, constraints, goals…"
-                  required
-                />
-
-                <label className="flex items-start gap-3 text-sm text-neutral-700">
-                  <input type="checkbox" name="consent" value="yes" className="mt-1" required />
-                  I consent to Trygve Studio Pvt. Ltd contacting me about this enquiry and agree to the privacy policy.
-                </label>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="inline-flex items-center justify-center rounded-full bg-[#101010] text-white px-6 py-3 text-sm md:text-[15px] hover:opacity-90 disabled:opacity-50 transition"
-                  >
-                    {submitting ? "Sending…" : "Send Your Vision"}
-                  </button>
-
-                  <a
-                    href="https://wa.me/919554440400" // ← replace
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-full border border-[#101010] px-5 py-3 text-sm md:text-[15px] hover:bg-black hover:text-white transition"
-                  >
-                    <FaWhatsapp className="text-green-600" />
-                    Or chat on WhatsApp
-                  </a>
-                </div>
-
-                <p className="text-xs text-neutral-500">
-                  We usually reply within 24 hours. For urgent requests, call us.
-                </p>
-                <div aria-live="polite" className="text-sm mt-2">
-                  {status.state === 'success' && (
-                    <p className="text-green-700">{status.message}</p>
-                  )}
-                  {status.state === 'error' && (
-                    <p className="text-red-700">{status.message}</p>
-                  )}
-                </div>
-              </form>
+           <ContactForm />
             </div>
           </div>
         </div>

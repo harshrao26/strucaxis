@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi2";
 import TeamSection from "@/components/TeamSection";
 import ContactCta from "@/components/ContactCta";
+import hero from "@/assets/about/image.png"
 
 /**
  * Full-fledged "About Us" page for StrucAxis
@@ -45,13 +46,14 @@ export default function AboutPage() {
 
 function AboutHero() {
   return (
-    <section className="relative mx-auto w-full overflow-hidden">
+    <section className="relative mx-auto w-full min-h-[100svh] overflow-hidden">
       <div className="absolute inset-0">
-        <img
-          src="https://images.unsplash.com/photo-1559061512-72ec2d893fb6?q=80&w=1557&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        <Image
+          src={hero}
           alt="Construction site"
           fill
-          className="object-contain"
+          sizes="100vw"
+          className="object-cover"
           priority
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
@@ -76,7 +78,7 @@ function AboutHero() {
             Our Mission <HiArrowRight className="h-5 w-5" />
           </a>
           <a
-            href="#contact"
+            href="/contact-us#project-form"
             className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 py-3 text-white backdrop-blur hover:bg-white/20"
           >
             Talk to Us

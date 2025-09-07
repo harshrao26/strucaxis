@@ -357,7 +357,7 @@ export default function ProjectsClient() {
   const typeTabs = ["All", "Interior", "Architecture"];
 
   return (
-    <main className="min-h-screen bg-[#F7F7F5] text-[#101010]">
+    <main className="min-h-screen mt-10 bg-[#F7F7F5] text-[#101010]">
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-white via-[#F7F7F5] to-[#EFEDE8]" />

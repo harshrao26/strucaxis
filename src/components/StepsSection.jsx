@@ -108,15 +108,7 @@ export default function FancyProcess() {
         </div>
 
         {/* CTA */}
-        <div className="mt-14 flex justify-center">
-          <a
-            href="#intake"
-            className="group inline-flex items-center gap-2 rounded-2xl bg-gray-900 px-6 py-3 text-white shadow-lg ring-1 ring-black/5 hover:bg-gray-800"
-          >
-            Start with the Project Intake
-            <HiArrowRight className="h-5 w-5 transition group-hover:translate-x-0.5" />
-          </a>
-        </div>
+         
       </div>
     </section>
   );

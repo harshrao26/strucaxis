@@ -2,13 +2,24 @@ export const dynamic = 'force-dynamic';
 // optionally:
 export const revalidate = 0; import { notFound } from "next/navigation";
 import BlogsClientUI from "@/components/BlogsClientUI";
+import { headers } from "next/headers";
 
-const API_BASE = "https://www.trygvestudio.com";
-
+function getBaseUrl() {
+  try {
+    const h = headers();
+    const proto = h.get("x-forwarded-proto") || "http";
+    const host = h.get("x-forwarded-host") || h.get("host");
+    if (host) return `${proto}://${host}`;
+  } catch (e) {
+    // headers() not available at build time
+  }
+  return process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || "http://localhost:3000";
+}
+ 
 // --- data ---
 async function getBlog(slug) {
   try {
-    const res = await fetch(`${API_BASE}/api/blogs/${slug}`, { cache: "no-store" });
+    const res = await fetch(`${getBaseUrl()}/api/blogs/${slug}`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch blog");
     return await res.json();
   } catch (err) {
@@ -19,9 +30,9 @@ async function getBlog(slug) {
 
 // --- metadata ---
 export async function generateMetadata({ params }) {
-  const { slug } = await params;                 // ✅ await params
+  const { slug } = params;
   try {
-    const res = await fetch(`${API_BASE}/api/blogs/${slug}`, { cache: "no-store" });
+    const res = await fetch(`${getBaseUrl()}/api/blogs/${slug}`, { cache: "no-store" });
     if (!res.ok) return {};
     const blog = await res.json();
 
@@ -51,7 +62,7 @@ export async function generateMetadata({ params }) {
 // optional: static params stays the same
 export async function generateStaticParams() {
   try {
-    const res = await fetch(`${API_BASE}/api/blogs`, { cache: "no-store" });
+    const res = await fetch(`${getBaseUrl()}/api/blogs`, { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch blogs list");
     const blogs = await res.json();
     return Array.isArray(blogs) ? blogs.map((b) => ({ slug: b.urlSlug })) : [];
@@ -63,7 +74,7 @@ export async function generateStaticParams() {
 
 // --- page ---
 export default async function BlogDetails({ params }) {
-  const { slug } = await params;                 // ✅ await params
+  const { slug } = params;
   const blog = await getBlog(slug);
   if (!blog) return notFound();
 
